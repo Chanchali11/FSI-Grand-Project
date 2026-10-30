@@ -3,6 +3,13 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# HireSphere AI Local Data & Secrets
+.env
+data/database/*.db
+data/uploads/
+data/synthetic/resumes/
+
+
 # C extensions
 *.so
 

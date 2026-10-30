@@ -1,0 +1,64 @@
+# Gastrointestinal Disease Classification Configuration
+project:
+  name: "Gastrointestinal Disease Classification (Kvasir Dataset)"
+  version: "1.0.0"
+  random_seed: 42
+
+dataset:
+  raw_dir: "data/raw"
+  splits_dir: "data/splits"
+  image_size: 224
+  num_classes: 8
+  classes:
+    - "dyed-lifted-polyps"
+    - "dyed-resection-margins"
+    - "esophagitis"
+    - "normal-cecum"
+    - "normal-pylorus"
+    - "normal-z-line"
+    - "polyps"
+    - "ulcerative-colitis"
+  class_descriptions:
+    dyed-lifted-polyps: "Lesions lifted with submucosal injection prior to endoscopic resection."
+    dyed-resection-margins: "Margins evaluated post-polypectomy using indigo carmine chromoendoscopy."
+    esophagitis: "Inflammation of the esophagus lining, often caused by acid reflux."
+    normal-cecum: "Normal landmark at the beginning of the large intestine, showing appendiceal orifice."
+    normal-pylorus: "Normal opening between stomach and duodenum controlling gastric emptying."
+    normal-z-line: "Normal gastroesophageal junction where esophageal squamous epithelium meets gastric mucosa."
+    polyps: "Colorectal mucosal outgrowths with potential premalignant transformation."
+    ulcerative-colitis: "Chronic inflammatory bowel disease affecting the colon and rectum."
+  split_ratios:
+    train: 0.70
+    val: 0.15
+    test: 0.15
+
+normalization:
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+
+models:
+  baseline:
+    name: "DenseNet121"
+    pretrained: true
+    dropout: 0.3
+  proposed:
+    name: "ConvNeXt-Tiny-CBAM"
+    pretrained: true
+    cbam_reduction_ratio: 16
+    cbam_kernel_size: 7
+    dropout: 0.2
+
+training:
+  batch_size: 16
+  epochs: 25
+  learning_rate: 0.0001
+  weight_decay: 0.00001
+  lr_scheduler: "cosine"
+  early_stopping_patience: 5
+
+explainability:
+  gradcam_target_layers:
+    convnext: "features.7"
+    densenet: "features.denseblock4"
+  colormap: "JET"
+  alpha: 0.5

@@ -1,0 +1,22 @@
+[server]
+# Fix _stcore/health and _stcore/host-config 404s in multi-page apps
+# These arise when the browser resolves internal Streamlit endpoints
+# relative to a page subpath instead of the app root.
+enableCORS = false
+enableXsrfProtection = false
+headless = true
+port = 8501
+
+[browser]
+# Ensures _stcore requests are always resolved from the server root
+gatherUsageStats = false
+serverAddress = "localhost"
+serverPort = 8501
+
+[runner]
+# Prevents duplicate widget ID warnings on page reruns
+fastReruns = true
+
+[theme]
+base = "dark"
+
