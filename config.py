@@ -25,6 +25,20 @@ for d in [DATA_DIR, UPLOAD_DIR, SYNTHETIC_DIR, DATABASE_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 
+def _get_setting(key: str, default: str = "") -> str:
+    """Fetch configuration from OS environment variables with Streamlit Cloud secrets fallback."""
+    val = os.getenv(key)
+    if val is not None and val != "":
+        return val
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return default
+
+
 class Settings(BaseModel):
     # App Information
     APP_NAME: str = "Hirexp Ai"
@@ -32,39 +46,39 @@ class Settings(BaseModel):
     VERSION: str = "1.0.0"
 
     # Database
-    DATABASE_URL: str = os.getenv(
+    DATABASE_URL: str = _get_setting(
         "DATABASE_URL", f"sqlite:///{DATABASE_DIR / 'hiresphere.db'}"
     )
 
     # Security & Tokens
-    SECRET_KEY: str = os.getenv("SECRET_KEY") or secrets.token_urlsafe(48)
-    INVITATION_TOKEN_EXPIRE_HOURS: int = int(os.getenv("INVITATION_TOKEN_EXPIRE_HOURS", "72"))
-    PASSWORD_SETUP_TOKEN_EXPIRE_HOURS: int = int(os.getenv("PASSWORD_SETUP_TOKEN_EXPIRE_HOURS", "48"))
-    SESSION_EXPIRE_HOURS: int = int(os.getenv("SESSION_EXPIRE_HOURS", "24"))
+    SECRET_KEY: str = _get_setting("SECRET_KEY") or secrets.token_urlsafe(48)
+    INVITATION_TOKEN_EXPIRE_HOURS: int = int(_get_setting("INVITATION_TOKEN_EXPIRE_HOURS", "72"))
+    PASSWORD_SETUP_TOKEN_EXPIRE_HOURS: int = int(_get_setting("PASSWORD_SETUP_TOKEN_EXPIRE_HOURS", "48"))
+    SESSION_EXPIRE_HOURS: int = int(_get_setting("SESSION_EXPIRE_HOURS", "24"))
 
     # App Portal Base URLs
-    APP_BASE_URL: str = os.getenv("APP_BASE_URL", "http://localhost:8501")
+    APP_BASE_URL: str = _get_setting("APP_BASE_URL", "http://localhost:8501")
 
     # Email & SMTP Integration
-    SMTP_HOST: str = os.getenv("SMTP_HOST", "")
-    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USER: str = os.getenv("SMTP_USER", "")
-    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
-    SMTP_FROM_EMAIL: str = os.getenv("SMTP_FROM_EMAIL", "recruitment@hiresphere.ai")
-    SMTP_FROM_NAME: str = os.getenv("SMTP_FROM_NAME", "HireSphere AI Recruitment Team")
-    SMTP_USE_TLS: bool = os.getenv("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
-    SMTP_MOCK_MODE: bool = os.getenv("SMTP_MOCK_MODE", "true").lower() in ("true", "1", "yes")
+    SMTP_HOST: str = _get_setting("SMTP_HOST", "")
+    SMTP_PORT: int = int(_get_setting("SMTP_PORT", "587"))
+    SMTP_USER: str = _get_setting("SMTP_USER", "")
+    SMTP_PASSWORD: str = _get_setting("SMTP_PASSWORD", "")
+    SMTP_FROM_EMAIL: str = _get_setting("SMTP_FROM_EMAIL", "recruitment@hiresphere.ai")
+    SMTP_FROM_NAME: str = _get_setting("SMTP_FROM_NAME", "HireSphere AI Recruitment Team")
+    SMTP_USE_TLS: bool = _get_setting("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
+    SMTP_MOCK_MODE: bool = _get_setting("SMTP_MOCK_MODE", "true").lower() in ("true", "1", "yes")
 
     # Anthropic Claude API Configuration
-    ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
-    CLAUDE_MODEL: str = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
-    USE_MOCK_AI: bool = os.getenv(
-        "USE_MOCK_AI", "true" if not os.getenv("ANTHROPIC_API_KEY") else "false"
+    ANTHROPIC_API_KEY: str = _get_setting("ANTHROPIC_API_KEY", "")
+    CLAUDE_MODEL: str = _get_setting("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
+    USE_MOCK_AI: bool = _get_setting(
+        "USE_MOCK_AI", "true" if not _get_setting("ANTHROPIC_API_KEY") else "false"
     ).lower() in ("true", "1", "yes")
 
     # Document Processing & Concurrency
     MAX_UPLOAD_SIZE_MB: int = 25
-    MAX_WORKERS: int = int(os.getenv("MAX_WORKERS", "6"))
+    MAX_WORKERS: int = int(_get_setting("MAX_WORKERS", "6"))
     BATCH_CHUNK_SIZE: int = 25
     ALLOWED_EXTENSIONS: list[str] = [".pdf", ".docx"]
 
