@@ -19,8 +19,6 @@ from src.database.repository import get_db_session
 from src.interview.interview_engine import InterviewEngine
 from src.recruitment.invitation_service import InvitationService
 from src.reports.interview_report_service import InterviewReportService
-from src.resume.pdf_parser import PDFParser
-from src.resume.resume_extractor import ResumeExtractor
 from src.security.interview_security_shield import render_interview_security_shield, render_camera_shutdown
 from src.security.privacy_manager import PrivacyManager
 from src.security.session_manager import SessionManager
@@ -34,20 +32,40 @@ st.set_page_config(
 )
 load_custom_css()
 
-# ── 1. ISOLATE STUDENT INTERVIEW (HIDE ALL RECRUITER SIDEBAR & PAGES) ──
+# ── 1. ISOLATE STUDENT INTERVIEW & ENFORCE ZERO-SCROLL VIEWPORT ──
 st.markdown(
     """
     <style>
       [data-testid="stSidebar"], [data-testid="collapsedControl"] {
         display: none !important;
       }
-      #MainMenu { visibility: hidden; }
-      header { visibility: hidden; }
-      footer { visibility: hidden; }
+      #MainMenu { visibility: hidden; height: 0 !important; }
+      header { visibility: hidden; height: 0 !important; }
+      footer { visibility: hidden; height: 0 !important; }
+
+      /* Fit complete virtual interview room into single window without page scrolling */
+      html, body {
+        overflow: hidden !important;
+        height: 100vh !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      [data-testid="stAppViewContainer"] {
+        overflow: hidden !important;
+        height: 100vh !important;
+      }
+      .main {
+        overflow: hidden !important;
+        height: 100vh !important;
+      }
       .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 2rem !important;
-        max-width: 1200px !important;
+        padding-top: 0.5rem !important;
+        padding-bottom: 0.3rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        max-width: 100% !important;
+        height: 100vh !important;
+        overflow-y: auto !important;
       }
       [style*="background: #FFF"] *, [style*="background: white"] *, [style*="background: #F8FAFC"] * {
         color: #0F172A !important;
@@ -61,25 +79,24 @@ st.markdown(
       [style*="background: #FFF"] [style*="color: #991B1B"] {
         color: #991B1B !important;
       }
-
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# ── 2. EXIT SCREEN (AFTER COMPLETING INTERVIEW, STUDENT IS OUTSIDE THE SITE) ──
+# ── 2. EXIT SCREEN (AFTER COMPLETING INTERVIEW, STUDENT IS SAFELY OUT) ──
 if st.session_state.get("interview_finished_exit"):
     render_camera_shutdown()
     st.markdown(
         """
-        <div class="hs-card" style="text-align: center; padding: 3.5rem 2rem; margin: 3rem auto; max-width: 650px; border-top: 4px solid #22C55E;">
-          <div style="font-size: 3.8rem; margin-bottom: 10px;">✅</div>
-          <h2 style="color: #4ADE80 !important; margin: 0 0 10px 0; font-size: 1.7rem; font-weight: 800;">Interview Successfully Completed!</h2>
-          <p style="color: #CBD5E1 !important; font-size: 1rem; line-height: 1.6; margin: 0 auto 1.8rem auto;">
+        <div class="hs-card" style="text-align: center; padding: 2.5rem 1.5rem; margin: 2rem auto; max-width: 600px; border-top: 4px solid #22C55E;">
+          <div style="font-size: 3.2rem; margin-bottom: 8px;">✅</div>
+          <h2 style="color: #4ADE80 !important; margin: 0 0 8px 0; font-size: 1.5rem; font-weight: 800;">Interview Successfully Completed!</h2>
+          <p style="color: #CBD5E1 !important; font-size: 0.92rem; line-height: 1.5; margin: 0 auto 1.5rem auto;">
             Your interview responses and AI evaluation report have been securely recorded and submitted to the recruitment team.
             You have been safely signed out of the platform.
           </p>
-          <div style="background: #19223C; border: 1px solid #232D4B; border-radius: 8px; padding: 12px; font-size: 0.88rem; color: #CBD5E1 !important;">
+          <div style="background: #19223C; border: 1px solid #232D4B; border-radius: 8px; padding: 10px; font-size: 0.84rem; color: #CBD5E1 !important;">
             🔒 All camera and microphone sensors have been deactivated.<br>
             You may now safely close this browser window.
           </div>
@@ -118,10 +135,10 @@ if student and not st.session_state.invitation_token:
 if not student and not st.session_state.invitation_token:
     st.markdown(
         """
-        <div class="hs-card" style="padding: 2.5rem; text-align: center; margin: 3rem auto; max-width: 600px; border-left: 4px solid #EF4444;">
-          <div style="font-size: 2.8rem; margin-bottom: 10px;">🔒</div>
-          <h2 style="color: #F87171 !important; margin: 0 0 8px 0; font-size: 1.4rem;">Student Interview Portal — Restricted</h2>
-          <p style="color: #CBD5E1 !important; font-size: 0.95rem; line-height: 1.6; margin: 0 auto 1.5rem auto;">
+        <div class="hs-card" style="padding: 2.2rem; text-align: center; margin: 2rem auto; max-width: 580px; border-left: 4px solid #EF4444;">
+          <div style="font-size: 2.5rem; margin-bottom: 8px;">🔒</div>
+          <h2 style="color: #F87171 !important; margin: 0 0 8px 0; font-size: 1.3rem;">Student Interview Portal — Restricted</h2>
+          <p style="color: #CBD5E1 !important; font-size: 0.9rem; line-height: 1.5; margin: 0 auto 1.3rem auto;">
             This Virtual AI Interview Room is exclusively for invited student candidates.
             Recruiters cannot take candidate interviews. Please log in through the Student Portal or use your unique invitation email link.
           </p>
@@ -151,48 +168,47 @@ if "interview_difficulty" not in st.session_state:
     st.session_state.interview_difficulty = "Intermediate"
 if "interview_num_questions" not in st.session_state:
     st.session_state.interview_num_questions = 5
-
-# Header Banner for Student
-st.markdown(
-    """
-    <div style="background: linear-gradient(135deg, #1E1B4B 0%, #312E81 60%, #4F46E5 100%); border-radius: 14px; padding: 1.4rem 1.8rem; margin-bottom: 1.4rem; color: #FFFFFF; box-shadow: 0 4px 16px rgba(79, 70, 229, 0.15);">
-      <div style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #C7D2FE; font-weight: 700; margin-bottom: 4px;">
-        Hirexp AI &bull; Proctored Candidate Assessment Room
-      </div>
-      <h1 style="margin: 0; font-size: 1.65rem; font-weight: 800; letter-spacing: -0.02em;">
-        Virtual AI Interview Room
-      </h1>
-      <p style="margin: 6px 0 0 0; color: #E0E7FF; font-size: 0.88rem;">
-        Evidence-based, resume-grounded technical & behavioral interview with live AI interviewer.
-      </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+if "camera_position" not in st.session_state:
+    st.session_state.camera_position = "right"  # Default to Extreme Right side
 
 # ── 4. CANDIDATE SETUP & CONSENT (BEFORE SESSION STARTS) ──
 if not st.session_state.active_session_id:
+    # Compact Header Bar
+    st.markdown(
+        """
+        <div style="background: linear-gradient(135deg, #1E1B4B 0%, #312E81 60%, #4F46E5 100%); border-radius: 10px; padding: 10px 16px; margin-bottom: 12px; color: #FFFFFF; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #C7D2FE; font-weight: 700;">Hirexp AI &bull; Proctored Candidate Assessment</div>
+            <h2 style="margin: 2px 0 0 0; font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em;">Virtual AI Interview Room Setup</h2>
+          </div>
+          <div style="font-size: 0.8rem; color: #E0E7FF; background: rgba(0, 0, 0, 0.25); padding: 4px 10px; border-radius: 6px;">
+            Single-Window Mode &bull; Zero Scroll
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     col_verif, col_guide = st.columns([3, 2])
 
     with col_verif:
         st.markdown(
             """
-            <div class="hs-card" style="margin-bottom: 1.25rem;">
-              <h3 style="margin: 0 0 4px 0; font-size: 1.1rem; font-weight: 700; color: #F8FAFC !important;">Candidate Verification & Consent</h3>
-              <p style="margin: 0 0 0 0; font-size: 0.82rem; color: #94A3B8 !important;">Verify your interview access token and consent to AI-assisted proctoring</p>
+            <div class="hs-card" style="margin-bottom: 10px; padding: 12px 16px;">
+              <h3 style="margin: 0 0 4px 0; font-size: 1rem; font-weight: 700; color: #F8FAFC !important;">Candidate Verification & Consent</h3>
+              <p style="margin: 0; font-size: 0.8rem; color: #94A3B8 !important;">Verify your access token and acknowledge proctoring monitoring</p>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
         token_input = st.text_input(
-            "Your Personal Interview Access Token",
+            "Personal Interview Access Token",
             value=st.session_state.invitation_token,
             placeholder="hs-inv-...",
             help="Found in your interview invitation email.",
         )
 
-        # Candidate Experience Options
         c_diff, c_avatar = st.columns(2)
         with c_diff:
             st.session_state.interview_difficulty = st.selectbox(
@@ -207,19 +223,18 @@ if not st.session_state.active_session_id:
                 index=0,
             )
 
-        # Privacy Notice Accordion
         privacy_info = PrivacyManager.get_privacy_notice()
-        with st.expander("📋 Review Candidate Privacy Policy & Data Processing Notice", expanded=False):
+        with st.expander("📋 Review Candidate Privacy Notice", expanded=False):
             st.write(f"**Purposes:** {', '.join(privacy_info['purposes'])}")
             st.write(f"**Non-Discrimination Policy:** {privacy_info['protected_characteristics_policy']}")
             st.write(f"**Data Retention Window:** {privacy_info['retention_policy']}")
 
         consent_given = st.checkbox(
-            "I acknowledge the privacy notice and agree to audio/video integrity monitoring (Single-person verification & tab focus guard).",
+            "I agree to camera/audio integrity monitoring (Single-person verification & protected tab focus).",
             value=True,
         )
 
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
         if st.button("🚀 Enter Virtual Interview Room", type="primary", use_container_width=True):
             if not token_input.strip():
                 st.error("Please enter a valid invitation token.")
@@ -248,28 +263,24 @@ if not st.session_state.active_session_id:
                         st.success("Session initialized! Welcome to your interview.")
                         st.rerun()
 
-
     with col_guide:
         st.markdown(
             """
-            <div class="hs-card" style="margin-bottom: 1.25rem; text-align: center;">
-              <h3 style="margin: 0 0 4px 0; font-size: 1.05rem; font-weight: 700; color: #F8FAFC !important;">AI Interviewer</h3>
-              <p style="margin: 0 0 8px 0; font-size: 0.82rem; color: #94A3B8 !important;">Ready to conduct your evidence-based virtual interview</p>
+            <div class="hs-card" style="margin-bottom: 8px; text-align: center; padding: 10px 14px;">
+              <h3 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #F8FAFC !important;">AI Virtual Interviewer</h3>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        render_avatar_component(state="idle", message="Hello! Welcome to your virtual interview room. I will guide you through your assessment.", height=320)
-        SpeechService.render_audio_recorder_and_transcriber()
+        render_avatar_component(state="idle", message="Hello! Welcome to your virtual interview room. I will guide you through your assessment.", height=240)
         st.markdown(
             """
-            <div style="font-size: 0.82rem; color: #94A3B8 !important; margin-top: 14px; line-height: 1.5;">
+            <div style="font-size: 0.78rem; color: #94A3B8 !important; margin-top: 8px; line-height: 1.45;">
               <strong style="color: #F8FAFC !important;">Exam Integrity Rules:</strong>
-              <ul style="margin: 6px 0; padding-left: 18px;">
-                <li><strong>Single Candidate Only:</strong> Only one person may be in camera frame. Multiple faces will trigger an integrity warning.</li>
-                <li><strong>Protected Tab:</strong> Switching browser tabs or minimizing the window will automatically terminate the session.</li>
-                <li><strong>Microphone:</strong> Speak clearly or type your response in the provided input box.</li>
-                <li><strong>Single Submission:</strong> Answers cannot be edited after final submission.</li>
+              <ul style="margin: 4px 0; padding-left: 16px;">
+                <li><strong>Single Person:</strong> Only one candidate allowed in camera frame.</li>
+                <li><strong>Protected Tab:</strong> Switching browser tabs will automatically terminate the session.</li>
+                <li><strong>Camera Feed:</strong> Positioned in the extreme corner for continuous proctoring.</li>
               </ul>
             </div>
             """,
@@ -317,39 +328,17 @@ else:
         q_idx = interview_session.current_question_index + 1
         total_q = interview_session.total_questions or 5
 
-        st.markdown(
-            f"""
-            <div class="hs-card" style="margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-              <div>
-                <strong style="color: #F8FAFC !important; font-size: 1.05rem;">{candidate.name if candidate else 'Candidate'}</strong> 
-                <span style="color: #94A3B8 !important; font-size: 0.88rem;">&bull; Interviewing for <strong style="color: #F8FAFC !important;">{job.title if job else 'Position'}</strong> at <strong style="color: #F8FAFC !important;">{company_name}</strong></span>
-              </div>
-              <div style="display: flex; gap: 8px; align-items: center;">
-                {render_badge(f"Track: {st.session_state.interview_difficulty}", "neutral")}
-                {render_badge(f"Stage: {interview_session.stage}", "primary")}
-                {render_badge(f"Question {min(q_idx, total_q)} of {total_q}", "success")}
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        # ── CAMERA MANAGEMENT: END CAMERA AFTER INTERVIEW COMPLETES ──
-        if is_completed:
-            render_camera_shutdown()
-        else:
-            render_interview_security_shield(session_id=interview_session.id)
-
         # ── 6. INTERVIEW COMPLETED: FINAL PERFORMANCE REPORT ──
         if is_completed:
+            render_camera_shutdown()
             if is_auto_term or st.query_params.get("term_reason"):
                 term_msg = st.query_params.get("term_reason", "Tab switch or leaving the interview room was detected.")
                 st.markdown(
                     f"""
-                    <div style="background: rgba(127, 29, 29, 0.25); border: 2px solid #EF4444; border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; text-align: center;">
-                      <div style="font-size: 2.2rem; margin-bottom: 6px;">🚨</div>
-                      <h3 style="color: #F87171 !important; margin: 0 0 6px 0; font-size: 1.25rem; font-weight: 800;">Interview Terminated Automatically</h3>
-                      <p style="color: #FCA5A5; font-size: 0.95rem; margin: 0 auto; max-width: 650px;">
+                    <div style="background: rgba(127, 29, 29, 0.25); border: 2px solid #EF4444; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; text-align: center;">
+                      <div style="font-size: 1.8rem; margin-bottom: 4px;">🚨</div>
+                      <h3 style="color: #F87171 !important; margin: 0 0 4px 0; font-size: 1.15rem; font-weight: 800;">Interview Terminated Automatically</h3>
+                      <p style="color: #FCA5A5; font-size: 0.88rem; margin: 0 auto; max-width: 650px;">
                         <strong>Integrity Violation:</strong> {term_msg}<br>
                         In accordance with exam proctoring rules, the interview was immediately ended and your answers finalized. The camera has been shut down.
                       </p>
@@ -362,15 +351,15 @@ else:
 
             st.markdown(
                 f"""
-                <div class="hs-card" style="text-align: center; padding: 2.5rem 2rem; margin-bottom: 1.5rem;">
-                  <div style="font-size: 3rem; margin-bottom: 6px;">🎉</div>
-                  <h2 style="color: #F8FAFC !important; margin: 0 0 6px 0; font-size: 1.6rem; font-weight: 700;">Interview Completed Successfully!</h2>
-                  <p style="color: #94A3B8 !important; font-size: 0.95rem; max-width: 600px; margin: 0 auto 1.5rem auto;">
-                    Thank you, <strong style="color: #F8FAFC;">{candidate.name if candidate else 'Candidate'}</strong>. Your responses were evaluated in real-time across technical mastery, practical depth, communication clarity, and problem solving.
+                <div class="hs-card" style="text-align: center; padding: 1.5rem 1rem; margin-bottom: 1rem;">
+                  <div style="font-size: 2.2rem; margin-bottom: 4px;">🎉</div>
+                  <h2 style="color: #F8FAFC !important; margin: 0 0 4px 0; font-size: 1.4rem; font-weight: 700;">Interview Completed!</h2>
+                  <p style="color: #94A3B8 !important; font-size: 0.88rem; max-width: 600px; margin: 0 auto 1rem auto;">
+                    Responses submitted for <strong style="color: #F8FAFC;">{candidate.name if candidate else 'Candidate'}</strong> &bull; {job.title if job else 'Position'}
                   </p>
-                  <div style="display: inline-block; background: rgba(22, 163, 74, 0.2); border: 1px solid #16A34A; border-radius: 12px; padding: 1.2rem 2.5rem; margin-bottom: 1.5rem;">
-                    <div style="font-size: 2.5rem; font-weight: 800; color: #4ADE80 !important; line-height: 1;">{report_data.get('overall_score', 0):.1f} / 100</div>
-                    <div style="font-size: 0.78rem; font-weight: 600; color: #86EFAC !important; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px;">Overall Composite Evaluation</div>
+                  <div style="display: inline-block; background: rgba(22, 163, 74, 0.2); border: 1px solid #16A34A; border-radius: 10px; padding: 0.8rem 2rem; margin-bottom: 1rem;">
+                    <div style="font-size: 2.2rem; font-weight: 800; color: #4ADE80 !important; line-height: 1;">{report_data.get('overall_score', 0):.1f} / 100</div>
+                    <div style="font-size: 0.72rem; font-weight: 600; color: #86EFAC !important; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 3px;">Composite Score</div>
                   </div>
                 </div>
                 """,
@@ -380,48 +369,14 @@ else:
             # Score Breakdown Metrics Cards
             m1, m2, m3, m4 = st.columns(4)
             with m1:
-                st.metric("Technical Knowledge", f"{report_data.get('technical_knowledge_score', 0):.1f}%")
+                st.metric("Technical", f"{report_data.get('technical_knowledge_score', 0):.1f}%")
             with m2:
-                st.metric("Project Knowledge", f"{report_data.get('project_knowledge_score', 0):.1f}%")
+                st.metric("Project Depth", f"{report_data.get('project_knowledge_score', 0):.1f}%")
             with m3:
-                st.metric("Communication Clarity", f"{report_data.get('communication_clarity_score', 0):.1f}%")
+                st.metric("Communication", f"{report_data.get('communication_clarity_score', 0):.1f}%")
             with m4:
-                st.metric("Answer Relevance", f"{report_data.get('answer_relevance_score', 0):.1f}%")
+                st.metric("Relevance", f"{report_data.get('answer_relevance_score', 0):.1f}%")
 
-            # Strengths, Weaknesses, and Improvements
-            c_str, c_weak = st.columns(2)
-            with c_str:
-                st.markdown("#### 💪 Key Strengths")
-                for s in report_data.get("strengths", []):
-                    st.markdown(f"- **{s}**")
-            with c_weak:
-                st.markdown("#### 🎯 Identified Weaknesses & Areas for Growth")
-                for w in report_data.get("weaknesses", []):
-                    st.markdown(f"- {w}")
-
-            st.markdown("#### 🚀 Recommended Practice Topics")
-            st.write(", ".join(report_data.get("recommended_practice_topics", [])))
-
-            # Question-by-Question Feedback Accordion
-            with st.expander("📝 Detailed Question-by-Question Breakdown & Rubrics", expanded=True):
-                for qf in report_data.get("question_feedbacks", []):
-                    st.markdown(
-                        f"""
-                        <div style="background: #19223C; border: 1px solid #232D4B; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
-                          <div style="font-weight: 700; color: #A5B4FC;">Question {qf['order']}: {qf['category']}</div>
-                          <div style="color: #F8FAFC !important; margin: 4px 0 8px 0; font-size: 0.95rem;">"{qf['question']}"</div>
-                          <div style="font-size: 0.88rem; color: #CBD5E1 !important; margin-bottom: 6px;"><strong style="color: #F8FAFC;">Candidate Answer:</strong> {html.escape(qf['answer'])}</div>
-                          <div style="display: flex; gap: 14px; font-size: 0.82rem; color: #94A3B8 !important;">
-                            <span style="font-weight: 700; color: #818CF8;">Score: {qf['score']:.1f}/100</span>
-                            <span><strong style="color: #CBD5E1;">Feedback:</strong> {html.escape(qf['feedback'])}</span>
-                          </div>
-                          {f'<div style="font-size: 0.8rem; color: #C084FC; margin-top: 4px;"><strong>AI Follow-Up:</strong> {html.escape(qf["follow_up"])}</div>' if qf.get('follow_up') else ''}
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-            # Downloadable Report Action
             report_html = InterviewReportService.generate_report_html(
                 report_data, candidate_name=candidate.name if candidate else "Candidate", job_title=job.title if job else "Role"
             )
@@ -435,13 +390,11 @@ else:
                     use_container_width=True,
                 )
             with col_d2:
-                # Update invitation status to COMPLETED
                 if interview_session.invitation:
                     interview_session.invitation.invitation_status = InterviewStatus.COMPLETED.value
                     interview_session.invitation.completed_at = datetime.utcnow()
                     session.commit()
 
-                # OUTSIDE THE SITE LOGOUT AND TERMINATION
                 if st.button("🚪 Finish & Sign Out (Exit Session)", type="primary", use_container_width=True):
                     st.session_state.active_session_id = None
                     st.session_state.invitation_token = None
@@ -454,15 +407,54 @@ else:
 
             st.stop()
 
-        # ── 7. LIVE INTERVIEW STEP ──
-        col_avatar, col_chat = st.columns([4, 6])
+        # ── 7. ACTIVE INTERVIEW COCKPIT (COMPACT SINGLE-WINDOW 3-COLUMN LAYOUT) ──
+        # Sleek Single-Line Top Header Bar (Zero scroll footprint)
+        col_hdr_info, col_hdr_badges = st.columns([6, 4])
+        with col_hdr_info:
+            st.markdown(
+                f"""
+                <div style="background: #11172A; border: 1px solid #1E293B; border-radius: 8px; padding: 6px 14px; display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 1.1rem;">⚡</span>
+                  <div>
+                    <strong style="color: #F8FAFC; font-size: 0.92rem;">Hirexp AI Virtual Interview</strong>
+                    <span style="color: #94A3B8; font-size: 0.8rem; margin-left: 6px;">&bull; {candidate.name if candidate else 'Candidate'} &bull; {job.title if job else 'Position'}</span>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with col_hdr_badges:
+            col_b1, col_b2, col_b3, col_b4 = st.columns([1, 1, 1, 1.2])
+            with col_b1:
+                st.markdown(render_badge(f"{st.session_state.interview_difficulty}", "neutral"), unsafe_allow_html=True)
+            with col_b2:
+                st.markdown(render_badge(f"{interview_session.stage}", "primary"), unsafe_allow_html=True)
+            with col_b3:
+                st.markdown(render_badge(f"Q {min(q_idx, total_q)}/{total_q}", "success"), unsafe_allow_html=True)
+            with col_b4:
+                # Camera Position Toggle (Extreme Right vs Extreme Left)
+                cur_cam = st.session_state.camera_position
+                cam_label = "📹 Cam: Right" if cur_cam == "right" else "📹 Cam: Left"
+                if st.button(cam_label, help="Toggle camera feed between Extreme Right and Extreme Left side", key="toggle_cam_side"):
+                    st.session_state.camera_position = "left" if cur_cam == "right" else "right"
+                    st.rerun()
 
+        # ── THREE-COLUMN INTERVIEW COCKPIT ──
+        # Fits completely on one window without scrolling
+        cam_on_left = st.session_state.camera_position == "left"
+
+        if cam_on_left:
+            col_camera, col_chat, col_avatar = st.columns([2.6, 4.8, 2.6])
+        else:
+            col_avatar, col_chat, col_camera = st.columns([2.6, 4.8, 2.6])
+
+        # ── AVATAR INTERVIEWER COLUMN ──
         with col_avatar:
             st.markdown(
                 """
-                <div class="hs-card" style="margin-bottom: 1rem; text-align: center; padding: 1rem;">
-                  <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8 !important;">
-                    AI Virtual Interviewer
+                <div style="background: #151C33; border: 1px solid #232D4B; border-radius: 8px; padding: 6px 10px; margin-bottom: 6px; text-align: center;">
+                  <div style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #818CF8;">
+                    🤖 AI Interviewer &bull; Sophia
                   </div>
                 </div>
                 """,
@@ -472,27 +464,28 @@ else:
                 state=st.session_state.avatar_state,
                 message=current_q.question_text,
                 avatar_model=st.session_state.avatar_persona,
-                height=390,
+                height=255,
             )
             SpeechService.render_speech_controls(text_to_speak=current_q.question_text)
             
             pct_complete = (interview_session.current_question_index / max(1, interview_session.total_questions))
             st.progress(pct_complete)
-            st.caption(f"Session Progress: {int(pct_complete * 100)}% complete ({interview_session.current_question_index}/{interview_session.total_questions} questions)")
+            st.caption(f"Progress: {int(pct_complete * 100)}% ({interview_session.current_question_index}/{interview_session.total_questions} answered)")
 
+        # ── QUESTION & CANDIDATE ANSWER COLUMN (CENTER) ──
         with col_chat:
             st.markdown(
                 f"""
-                <div style="background: #151C33; border: 1px solid #232D4B; border-left: 4px solid #6366F1; border-radius: 12px; padding: 1.35rem 1.5rem; margin-bottom: 1.25rem; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="color: #818CF8; font-weight: 700; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em;">
+                <div style="background: #151C33; border: 1px solid #232D4B; border-left: 4px solid #6366F1; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+                    <span style="color: #818CF8; font-weight: 700; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em;">
                       Question {current_q.question_order} &bull; {current_q.category}
                     </span>
-                    <span style="background: #19223C; color: #94A3B8 !important; border: 1px solid #334155; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600;">
+                    <span style="background: #19223C; color: #94A3B8 !important; border: 1px solid #334155; padding: 1px 6px; border-radius: 9999px; font-size: 0.68rem; font-weight: 600;">
                       {current_q.question_type}
                     </span>
                   </div>
-                  <div style="color: #F8FAFC !important; font-size: 1.15rem; font-weight: 600; line-height: 1.45;">
+                  <div style="color: #F8FAFC !important; font-size: 0.98rem; font-weight: 600; line-height: 1.35;">
                     {current_q.question_text}
                   </div>
                 </div>
@@ -500,27 +493,23 @@ else:
                 unsafe_allow_html=True,
             )
 
-            # Microphone Recording & Speech-to-Text Component
+            # Audio Transcriber (Compact)
             SpeechService.render_audio_recorder_and_transcriber()
 
-            # Rubric Transparency Box
-            with st.expander("🔍 Rubric Criteria & Expected Concepts", expanded=False):
-                st.write(f"**Target Concepts:** {', '.join(current_q.expected_concepts or [])}")
-                st.write(f"**Rubric Points:** {current_q.rubric_criteria}")
-
-            # Candidate Answer Input Form
+            # Answer Input Form
             with st.form(f"answer_form_{current_q.id}"):
                 cand_answer = st.text_area(
-                    "Your Answer (Type or speak via microphone):",
-                    placeholder="Provide your detailed answer here. Focus on real-world engineering experiences, architecture trade-offs, and practical lessons...",
-                    height=160,
+                    "Your Answer:",
+                    placeholder="Type or speak via microphone above. Detail your technical solution, trade-offs, and experiences...",
+                    height=100,
+                    label_visibility="collapsed",
                 )
 
-                c_sub, c_end = st.columns([2, 1])
+                c_sub, c_end = st.columns([3, 1])
                 with c_sub:
-                    submit_btn = st.form_submit_button("Submit Answer & Next Question ➔", type="primary", use_container_width=True)
+                    submit_btn = st.form_submit_button("Submit Answer & Next ➔", type="primary", use_container_width=True)
                 with c_end:
-                    end_now_btn = st.form_submit_button("End Interview Early", use_container_width=True)
+                    end_now_btn = st.form_submit_button("End Early", use_container_width=True)
 
                 if end_now_btn:
                     engine._finalize_session(session, interview_session)
@@ -536,7 +525,7 @@ else:
                         st.warning("Please enter or transcribe an answer before submitting.")
                     else:
                         st.session_state.avatar_state = "thinking"
-                        with st.spinner("AI Evaluator scoring response and formulating follow-up..."):
+                        with st.spinner("AI Evaluator scoring response..."):
                             eval_res = engine.submit_answer(
                                 session=session,
                                 session_id=interview_session.id,
@@ -548,18 +537,29 @@ else:
                             st.session_state.avatar_state = "speaking"
                             st.rerun()
 
-            # Display Constructive Real-time Feedback & Contextual Follow-up
+            # Real-time Feedback on previous response
             if st.session_state.last_feedback:
                 fb = st.session_state.last_feedback
                 st.markdown(
                     f"""
-                    <div style="background: rgba(22, 163, 74, 0.15); border: 1px solid #16A34A; border-radius: 10px; padding: 14px 16px; margin-top: 14px;">
-                      <div style="color: #4ADE80 !important; font-weight: 700; font-size: 0.9rem;">
-                        Feedback on Previous Answer (Score: {fb.get('score', 0):.1f}/100)
-                      </div>
-                      <div style="color: #F8FAFC !important; font-size: 0.88rem; margin: 6px 0; line-height: 1.45;">{fb.get('feedback', '')}</div>
-                      {f'<div style="color: #818CF8; font-size: 0.84rem; margin-top: 6px;"><strong>Contextual Follow-up Generated:</strong> "{fb.get("follow_up_question")}"</div>' if fb.get("follow_up_question") else ''}
+                    <div style="background: rgba(22, 163, 74, 0.12); border: 1px solid #16A34A; border-radius: 6px; padding: 6px 10px; margin-top: 5px; font-size: 0.78rem; max-height: 70px; overflow-y: auto;">
+                      <span style="color: #4ADE80; font-weight: 700;">Previous Answer Score: {fb.get('score', 0):.0f}/100 &bull; </span>
+                      <span style="color: #CBD5E1;">{fb.get('feedback', '')}</span>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
+
+        # ── CAMERA CAPTURE COLUMN (EXTREME RIGHT OR LEFT) ──
+        with col_camera:
+            st.markdown(
+                """
+                <div style="background: #151C33; border: 1px solid #232D4B; border-radius: 8px; padding: 6px 10px; margin-bottom: 6px; text-align: center;">
+                  <div style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #4ADE80;">
+                    📹 Camera & AI Proctoring
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            render_interview_security_shield(session_id=interview_session.id)

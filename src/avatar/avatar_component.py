@@ -64,12 +64,12 @@ def render_avatar_component(
 
         .avatar-container {{
           position: relative;
-          width: 280px;
-          height: 280px;
-          border-radius: 28px;
+          width: 195px;
+          height: 195px;
+          border-radius: 18px;
           overflow: hidden;
-          box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(6, 182, 212, 0.15);
-          border: 3px solid #06B6D4;
+          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15), 0 2px 8px rgba(6, 182, 212, 0.2);
+          border: 2.5px solid #06B6D4;
           background: #151C33;
           display: flex;
           align-items: center;
@@ -95,15 +95,15 @@ def render_avatar_component(
 
         /* Persona & Status Badges */
         .status-container {{
-          margin-top: 10px;
+          margin-top: 5px;
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 6px;
+          gap: 3px;
         }}
 
         .persona-name {{
-          font-size: 14px;
+          font-size: 12.5px;
           font-weight: 700;
           color: #F8FAFC;
           letter-spacing: 0.02em;
@@ -113,9 +113,9 @@ def render_avatar_component(
         }}
 
         .state-badge {{
-          padding: 4px 14px;
+          padding: 2px 8px;
           border-radius: 9999px;
-          font-size: 11px;
+          font-size: 10px;
           font-weight: 700;
           letter-spacing: 0.06em;
           text-transform: uppercase;

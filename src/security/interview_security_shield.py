@@ -80,30 +80,28 @@ def render_interview_security_shield(session_id: str = ""):
         .shield-container {{
           background: #151C33;
           border: 1px solid #232D4B;
-          border-radius: 12px;
-          padding: 14px 18px;
-          margin-bottom: 14px;
+          border-radius: 10px;
+          padding: 10px 12px;
+          margin-bottom: 8px;
           box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
         }}
         .shield-header {{
           display: flex;
           align-items: center;
           justify-content: space-between;
-          flex-wrap: wrap;
-          gap: 10px;
-          margin-bottom: 10px;
+          margin-bottom: 8px;
         }}
         .shield-title {{
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 6px;
           font-weight: 700;
-          font-size: 13px;
+          font-size: 12px;
           color: #F8FAFC;
         }}
         .pill-badge {{
-          font-size: 11px;
-          padding: 3px 10px;
+          font-size: 10px;
+          padding: 2px 8px;
           border-radius: 9999px;
           font-weight: 700;
           letter-spacing: 0.02em;
@@ -113,14 +111,14 @@ def render_interview_security_shield(session_id: str = ""):
 
         .media-preview-row {{
           display: flex;
-          align-items: center;
-          gap: 14px;
-          flex-wrap: wrap;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 8px;
         }}
         .video-box {{
-          width: 160px;
-          height: 120px;
-          border-radius: 10px;
+          width: 100%;
+          height: 148px;
+          border-radius: 8px;
           background: #0F172A;
           overflow: hidden;
           position: relative;
@@ -227,13 +225,10 @@ def render_interview_security_shield(session_id: str = ""):
       <div class="shield-container" id="shieldCard">
         <div class="shield-header">
           <div class="shield-title">
-            <span>🛡️ AI Proctoring & Integrity Guard</span>
-            <span class="pill-badge pill-active" id="guardBadge">● Single Candidate Active</span>
+            <span>🛡️ Proctoring Guard</span>
+            <span class="pill-badge pill-active" id="guardBadge">● Verified</span>
           </div>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <button class="fs-btn" id="btnFs" onclick="toggleFullscreen()">⛶ Fullscreen</button>
-            <span style="font-size: 11px; color: #DC2626; font-weight: 600;">⚠️ Tab switch will terminate session</span>
-          </div>
+          <button class="fs-btn" id="btnFs" onclick="toggleFullscreen()" style="padding: 3px 8px; font-size: 10px;">⛶ Fullscreen</button>
         </div>
 
         <div class="media-preview-row">
@@ -270,6 +265,9 @@ def render_interview_security_shield(session_id: str = ""):
 
         <div class="warning-banner" id="warningBanner">
           🚨 <strong>Exam Integrity Violation:</strong> <span id="warningMsg">Navigating away from the interview tab... Finalizing and terminating session.</span>
+        </div>
+        <div style="font-size: 10px; color: #EF4444; font-weight: 600; text-align: center; margin-top: 4px;">
+          ⚠️ Tab switch or leaving room terminates session
         </div>
       </div>
 
@@ -512,4 +510,4 @@ def render_interview_security_shield(session_id: str = ""):
     </body>
     </html>
     """
-    components.html(html_code, height=215)
+    components.html(html_code, height=315)
