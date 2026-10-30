@@ -37,6 +37,7 @@ from src.database.models import (
     UserRole,
 )
 from src.interview.interview_engine import InterviewEngine
+from config import settings
 from src.recruitment.campaign_service import CampaignService
 from src.recruitment.email_service import EmailService
 from src.recruitment.invitation_service import InvitationService
@@ -47,6 +48,7 @@ from src.security.student_auth_service import StudentAuthService
 
 @pytest.fixture
 def workflow_db():
+    settings.SMTP_MOCK_MODE = True
     engine = create_engine("sqlite:///:memory:", echo=False)
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)

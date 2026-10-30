@@ -1,39 +1,16 @@
 from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import html
 import logging
+import smtplib
 
-from flask import Flask
-from flask_mail import Mail, Message as MailMessage
 from sqlalchemy.orm import Session
 
 from config import settings
 from src.database.models import EmailDeliveryStatus, EmailNotification
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Flask-Mail app factory — reused across calls (module-level singleton)
-# ---------------------------------------------------------------------------
-
-def _get_mail_instance() -> tuple["Flask", "Mail"]:
-    """Create and return a configured Flask + Flask-Mail instance."""
-    # Gmail App Passwords are sometimes stored with spaces (e.g. "xxxx xxxx xxxx xxxx")
-    # Strip spaces so they work correctly with SMTP AUTH.
-    clean_password = settings.SMTP_PASSWORD.replace(" ", "") if settings.SMTP_PASSWORD else ""
-
-    app = Flask(__name__)
-    app.config.update(
-        MAIL_SERVER=settings.SMTP_HOST,
-        MAIL_PORT=settings.SMTP_PORT,
-        MAIL_USE_TLS=settings.SMTP_USE_TLS and settings.SMTP_PORT != 465,
-        MAIL_USE_SSL=settings.SMTP_PORT == 465,
-        MAIL_USERNAME=settings.SMTP_USER,
-        MAIL_PASSWORD=clean_password,
-        MAIL_DEFAULT_SENDER=(settings.SMTP_FROM_NAME, settings.SMTP_FROM_EMAIL),
-        MAIL_TIMEOUT=15,
-    )
-    mail = Mail(app)
-    return app, mail
 
 
 class EmailService:
@@ -208,33 +185,41 @@ class EmailService:
             )
             return True, mock_note
 
-        # Real delivery via Flask-Mail
+        # Real delivery via standard library smtplib
         try:
-            flask_app, mail = _get_mail_instance()
+            clean_password = settings.SMTP_PASSWORD.replace(" ", "") if settings.SMTP_PASSWORD else ""
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM_EMAIL}>"
+            msg["To"] = recipient_email
 
             plain_text = (
                 "Congratulations! You have been shortlisted for an interview with HireSphere AI.\n\n"
                 "Please open this email in an HTML-capable email client to view your "
                 "credentials and interview portal link."
             )
+            msg.attach(MIMEText(plain_text, "plain", "utf-8"))
+            msg.attach(MIMEText(body_html, "html", "utf-8"))
 
-            msg = MailMessage(
-                subject=subject,
-                recipients=[recipient_email],
-                body=plain_text,
-                html=body_html,
-                sender=(settings.SMTP_FROM_NAME, settings.SMTP_FROM_EMAIL),
-            )
+            if settings.SMTP_PORT == 465:
+                server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15)
+            else:
+                server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15)
+                if settings.SMTP_USE_TLS:
+                    server.starttls()
 
-            with flask_app.app_context():
-                mail.send(msg)
+            if settings.SMTP_USER and clean_password:
+                server.login(settings.SMTP_USER, clean_password)
 
-            logger.info(f"[Flask-Mail] Email sent successfully to {recipient_email}")
-            return True, f"Flask-Mail: Message delivered to {recipient_email}"
+            server.sendmail(settings.SMTP_FROM_EMAIL, [recipient_email], msg.as_string())
+            server.quit()
+
+            logger.info(f"[SMTP] Email sent successfully to {recipient_email}")
+            return True, f"SMTP: Message delivered to {recipient_email}"
 
         except Exception as e:
-            logger.error(f"[Flask-Mail] Failed to send email to {recipient_email}: {e}", exc_info=True)
-            return False, f"Flask-Mail Delivery Error: {str(e)}"
+            logger.error(f"[SMTP] Failed to send email to {recipient_email}: {e}", exc_info=True)
+            return False, f"SMTP Delivery Error: {str(e)}"
 
     @staticmethod
     def _build_invitation_email_html(

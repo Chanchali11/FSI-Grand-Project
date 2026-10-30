@@ -34,6 +34,7 @@ from src.database.models import (
     User,
     UserRole,
 )
+from config import settings
 from src.recruitment.email_service import EmailService
 from src.recruitment.invitation_service import InvitationService
 from src.security.authentication import hash_password, verify_password, validate_password_strength
@@ -42,6 +43,7 @@ from src.security.student_auth_service import StudentAuthService
 
 @pytest.fixture
 def test_db():
+    settings.SMTP_MOCK_MODE = True
     engine = create_engine("sqlite:///:memory:", echo=False)
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
