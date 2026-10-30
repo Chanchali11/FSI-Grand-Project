@@ -1,5 +1,6 @@
 from collections.abc import Generator
 from contextlib import contextmanager
+from datetime import datetime
 import logging
 import threading
 from typing import Any
@@ -12,6 +13,7 @@ from src.database.models import (
     AuditEvent,
     Base,
     Company,
+    InterviewSecurityEvent,
     Job,
     Recruiter,
     RecruitmentCampaign,
@@ -241,3 +243,19 @@ class DatabaseRepository:
             details=details or {},
         )
         session.add(event)
+
+    @staticmethod
+    def log_security_event(
+        session: Session,
+        session_id: str,
+        event_type: str,
+        details: dict[str, Any] | None = None,
+    ) -> InterviewSecurityEvent:
+        event = InterviewSecurityEvent(
+            session_id=session_id,
+            event_type=event_type,
+            event_details=details or {},
+            timestamp=datetime.utcnow(),
+        )
+        session.add(event)
+        return event

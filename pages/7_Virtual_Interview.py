@@ -15,7 +15,8 @@ from src.database.models import (
     ParsedResumeData,
     ResumeDocument,
 )
-from src.database.repository import get_db_session
+import json
+from src.database.repository import DatabaseRepository, get_db_session
 from src.interview.interview_engine import InterviewEngine
 from src.recruitment.invitation_service import InvitationService
 from src.reports.interview_report_service import InterviewReportService
@@ -303,26 +304,24 @@ else:
         engine = InterviewEngine()
         current_q = engine.get_current_question(session, interview_session.id)
 
-        # ── AUTOMATIC TERMINATION CHECK (TAB SWITCH / NAVIGATION DETECTED) ──
-        is_auto_term = st.query_params.get("auto_terminated") == "1"
-        if is_auto_term and interview_session.status != InterviewStatus.COMPLETED.value:
-            engine._finalize_session(session, interview_session)
-            interview_session.status = InterviewStatus.COMPLETED.value
-            if interview_session.invitation:
-                interview_session.invitation.invitation_status = InterviewStatus.COMPLETED.value
-                interview_session.invitation.completed_at = datetime.utcnow()
-            sec_event = InterviewSecurityEvent(
-                session_id=interview_session.id,
-                event_type="tab_switch_auto_terminate",
-                event_details={
-                    "reason": st.query_params.get("term_reason", "Tab switch away from interview room detected"),
-                    "timestamp": datetime.utcnow().isoformat(),
-                },
-            )
-            session.add(sec_event)
-            session.commit()
+        # ── REAL-TIME PROCTORING EVENT INGESTION & DATABASE PERSISTENCE ──
+        sync_event_param = st.query_params.get("sync_event")
+        if sync_event_param:
+            try:
+                ev_data = json.loads(sync_event_param)
+                ev_type = ev_data.get("event_type", "security_event")
+                ev_details = ev_data.get("details", {})
+                DatabaseRepository.log_security_event(
+                    session=session,
+                    session_id=interview_session.id,
+                    event_type=ev_type,
+                    details=ev_details,
+                )
+                session.commit()
+            except Exception:
+                pass
 
-        is_completed = interview_session.status == InterviewStatus.COMPLETED.value or not current_q or is_auto_term
+        is_completed = interview_session.status == InterviewStatus.COMPLETED.value or not current_q
 
         # Candidate & Stage Info Bar
         q_idx = interview_session.current_question_index + 1
@@ -331,17 +330,22 @@ else:
         # ── 6. INTERVIEW COMPLETED: FINAL PERFORMANCE REPORT ──
         if is_completed:
             render_camera_shutdown()
-            if is_auto_term or st.query_params.get("term_reason"):
-                term_msg = st.query_params.get("term_reason", "Tab switch or leaving the interview room was detected.")
+            # Check if session has integrity flags for recruiter review
+            sec_flags = (
+                session.query(InterviewSecurityEvent)
+                .filter(
+                    InterviewSecurityEvent.session_id == interview_session.id,
+                    InterviewSecurityEvent.event_type.in_(["tab_switch_flagged", "multiple_people_detected", "mobile_phone_detected"])
+                )
+                .all()
+            )
+            if sec_flags:
                 st.markdown(
                     f"""
-                    <div style="background: rgba(127, 29, 29, 0.25); border: 2px solid #EF4444; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; text-align: center;">
-                      <div style="font-size: 1.8rem; margin-bottom: 4px;">🚨</div>
-                      <h3 style="color: #F87171 !important; margin: 0 0 4px 0; font-size: 1.15rem; font-weight: 800;">Interview Terminated Automatically</h3>
-                      <p style="color: #FCA5A5; font-size: 0.88rem; margin: 0 auto; max-width: 650px;">
-                        <strong>Integrity Violation:</strong> {term_msg}<br>
-                        In accordance with exam proctoring rules, the interview was immediately ended and your answers finalized. The camera has been shut down.
-                      </p>
+                    <div style="background: rgba(245, 158, 11, 0.15); border: 1.5px solid #F59E0B; border-radius: 8px; padding: 0.7rem 1rem; margin-bottom: 1rem; text-align: center;">
+                      <span style="font-size: 1.15rem;">⚠️</span>
+                      <strong style="color: #FBBF24; font-size: 0.92rem; margin-left: 6px;">Integrity Notice:</strong>
+                      <span style="color: #CBD5E1; font-size: 0.85rem;"> {len(sec_flags)} proctoring event(s) have been flagged and recorded for recruiter audit review.</span>
                     </div>
                     """,
                     unsafe_allow_html=True,
