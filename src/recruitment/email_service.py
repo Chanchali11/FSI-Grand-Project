@@ -174,11 +174,22 @@ class EmailService:
         subject: str,
         body_html: str,
     ) -> tuple[bool, str]:
-        """Dispatches email via Flask-Mail (real SMTP) or deterministic mock transport."""
-        if settings.SMTP_MOCK_MODE or not settings.SMTP_HOST or not settings.SMTP_USER:
+        """Dispatches email via standard library smtplib or deterministic mock transport."""
+        from config import _get_setting
+
+        smtp_mock_mode = settings.SMTP_MOCK_MODE or (_get_setting("SMTP_MOCK_MODE", "true").lower() in ("true", "1", "yes"))
+        smtp_host = _get_setting("SMTP_HOST", settings.SMTP_HOST)
+        smtp_port = int(_get_setting("SMTP_PORT", str(settings.SMTP_PORT)))
+        smtp_user = _get_setting("SMTP_USER", settings.SMTP_USER)
+        smtp_password = _get_setting("SMTP_PASSWORD", settings.SMTP_PASSWORD)
+        smtp_from_email = _get_setting("SMTP_FROM_EMAIL", settings.SMTP_FROM_EMAIL)
+        smtp_from_name = _get_setting("SMTP_FROM_NAME", settings.SMTP_FROM_NAME)
+        smtp_use_tls = _get_setting("SMTP_USE_TLS", str(settings.SMTP_USE_TLS)).lower() in ("true", "1", "yes")
+
+        if smtp_mock_mode or not smtp_host or not smtp_user:
             mock_note = (
                 "MockTransport: [MOCK MODE] Simulated delivery — "
-                "SMTP credentials not configured in .env."
+                "SMTP credentials not configured."
             )
             logger.info(
                 f"[MOCK EMAIL SERVICE] To: {recipient_email} | Subject: {subject} | {mock_note}"
@@ -187,10 +198,10 @@ class EmailService:
 
         # Real delivery via standard library smtplib
         try:
-            clean_password = settings.SMTP_PASSWORD.replace(" ", "") if settings.SMTP_PASSWORD else ""
+            clean_password = smtp_password.replace(" ", "") if smtp_password else ""
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM_EMAIL}>"
+            msg["From"] = f"{smtp_from_name} <{smtp_from_email}>"
             msg["To"] = recipient_email
 
             plain_text = (
@@ -201,17 +212,17 @@ class EmailService:
             msg.attach(MIMEText(plain_text, "plain", "utf-8"))
             msg.attach(MIMEText(body_html, "html", "utf-8"))
 
-            if settings.SMTP_PORT == 465:
-                server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15)
+            if smtp_port == 465:
+                server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15)
             else:
-                server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15)
-                if settings.SMTP_USE_TLS:
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+                if smtp_use_tls:
                     server.starttls()
 
-            if settings.SMTP_USER and clean_password:
-                server.login(settings.SMTP_USER, clean_password)
+            if smtp_user and clean_password:
+                server.login(smtp_user, clean_password)
 
-            server.sendmail(settings.SMTP_FROM_EMAIL, [recipient_email], msg.as_string())
+            server.sendmail(smtp_from_email, [recipient_email], msg.as_string())
             server.quit()
 
             logger.info(f"[SMTP] Email sent successfully to {recipient_email}")

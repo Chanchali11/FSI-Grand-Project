@@ -26,16 +26,20 @@ for d in [DATA_DIR, UPLOAD_DIR, SYNTHETIC_DIR, DATABASE_DIR]:
 
 
 def _get_setting(key: str, default: str = "") -> str:
-    """Fetch configuration from OS environment variables with Streamlit Cloud secrets fallback."""
-    val = os.getenv(key)
-    if val is not None and val != "":
-        return val
+    """Fetch configuration prioritizing Streamlit Cloud secrets, then OS environment, then default."""
     try:
         import streamlit as st
         if hasattr(st, "secrets") and key in st.secrets:
-            return str(st.secrets[key])
+            val = str(st.secrets[key]).strip()
+            if val != "":
+                return val
     except Exception:
         pass
+
+    val = os.getenv(key)
+    if val is not None and val.strip() != "":
+        return val.strip()
+
     return default
 
 

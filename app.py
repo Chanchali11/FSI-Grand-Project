@@ -1,7 +1,17 @@
+import os
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+
+# Synchronize Streamlit Cloud Secrets into environment variables
+try:
+    if hasattr(st, "secrets"):
+        for k, v in st.secrets.items():
+            if isinstance(v, (str, int, float, bool)):
+                os.environ[str(k)] = str(v)
+except Exception:
+    pass
 
 # Configure wide page layout
 st.set_page_config(

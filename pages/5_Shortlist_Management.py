@@ -184,7 +184,12 @@ with get_db_session() as session:
 
 
     # 3. Issued Invitations Log & Recruiter Action Table
-    smtp_mode_info = "⚡ <strong>Mock Transport Mode</strong> (Local dev/testing: delivery simulated and recorded in database)" if settings.SMTP_MOCK_MODE or not settings.SMTP_HOST else f"🌐 <strong>Live SMTP Mode</strong> (Host: {settings.SMTP_HOST})"
+    from config import _get_setting
+    active_host = _get_setting("SMTP_HOST", settings.SMTP_HOST)
+    active_user = _get_setting("SMTP_USER", settings.SMTP_USER)
+    active_mock = _get_setting("SMTP_MOCK_MODE", str(settings.SMTP_MOCK_MODE)).lower() in ("true", "1", "yes")
+    is_live = bool(active_host and active_user and not active_mock)
+    smtp_mode_info = f"🌐 <strong>Live SMTP Mode</strong> (Host: {active_host})" if is_live else "⚡ <strong>Mock Transport Mode</strong> (Local dev/testing: delivery simulated and recorded in database)"
     st.markdown(
         f"""
         <div class="hs-card">
@@ -202,9 +207,7 @@ with get_db_session() as session:
     if invitations:
         inv_rows = []
         for inv in invitations:
-            delivery_display = inv["email_status"]
-            if settings.SMTP_MOCK_MODE or not settings.SMTP_USER:
-                delivery_display = "SIMULATED (Mock Mode - see .env)"
+            delivery_display = inv.get("email_status") or ("SIMULATED" if active_mock else "PENDING")
 
             inv_rows.append({
                 "Student Name": inv["candidate_name"],
