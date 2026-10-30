@@ -52,26 +52,12 @@ def render_camera_shutdown():
 def render_interview_security_shield(session_id: str = ""):
     """
     Enterprise-grade Client-Side Interview Security & AI Proctoring Shield:
-    1. Browser Activity & Tab Switching Detection:
-       - Page Visibility API, window.blur/focus, fullscreenchange.
-       - Graduated 3-tier warning system (Warning 1, Warning 2, Warning 3 flagged for recruiter review).
-       - Accidental focus debounce & persistent review flagging (no auto-disqualification).
-    2. Real-Time Multiple-Person Detection:
-       - BlazeFace computer vision model on WebRTC camera frames.
-       - Draws bounding boxes on local canvas preview.
-       - Consecutive-cycle verification for 0 faces, 1 face (normal), 2+ faces (violation).
-    3. Mobile Phone & Gadget Detection:
-       - COCO-SSD object detection model.
-       - Detects mobile phones ('cell phone') and unauthorized electronic devices.
-       - Highlights detected gadgets with red bounding boxes and warning overlays.
-    4. Copy, Paste & Keyboard Restrictions:
-       - Disables paste into protected answer fields with clear user prompt.
-       - Intercepts unauthorized copy/cut and restricted developer shortcuts (F12, Ctrl+C/V/X/P/S).
-    5. Camera & Microphone Monitoring:
-       - Stream connection & disconnect detection with reconnect recovery.
-       - Live Web Audio API microphone volume input level meter.
-    6. Seamless Backend Event Dispatching:
-       - Dispatches structured events to database and parent window log.
+    - Highly optimized sequential async AI loops (Zero UI thread blocking)
+    - TensorFlow.js + BlazeFace multi-person detection with visual bounding boxes
+    - COCO-SSD object detection for mobile phones and prohibited electronic devices
+    - Graduated tab-switching warning system (Warning 1, Warning 2, Warning 3 flagged for recruiter review)
+    - Live Web Audio API microphone volume input level meter
+    - Safe cross-origin iframe handling and device error recovery
     """
     html_code = f"""
     <!DOCTYPE html>
@@ -158,7 +144,7 @@ def render_interview_security_shield(session_id: str = ""):
           pointer-events: none;
         }}
         .hud-tag {{
-          background: rgba(15, 23, 42, 0.82);
+          background: rgba(15, 23, 42, 0.85);
           color: #FFFFFF;
           font-size: 9px;
           font-weight: 700;
@@ -331,10 +317,22 @@ def render_interview_security_shield(session_id: str = ""):
         let consecutivePhoneDetected = 0;
         let lastWarningType = "";
         let isArmed = false;
+        let isDetectingFace = false;
+        let isDetectingGadget = false;
 
         const video = document.getElementById("hiddenVideo");
         const canvas = document.getElementById("camCanvas");
         const ctx = canvas.getContext("2d");
+
+        // Helper: Safe cross-origin access to parent document
+        function safeGetParentDoc() {{
+          try {{
+            if (window.parent && window.parent !== window && window.parent.document) {{
+              return window.parent.document;
+            }}
+          }} catch(e) {{}}
+          return document;
+        }}
 
         // Helper: Record and sync security events to parent and backend
         function recordSecurityEvent(eventType, details) {{
@@ -346,20 +344,8 @@ def render_interview_security_shield(session_id: str = ""):
           }};
 
           try {{
-            // Store locally in window.parent
             if (window.parent) {{
-              window.parent._hirexpSecurityEvents = window.parent._hirexpSecurityEvents || [];
-              window.parent._hirexpSecurityEvents.push(eventObj);
-              
-              // PostMessage to parent
               window.parent.postMessage({{ type: "HIREXP_SEC_EVENT", event: eventObj }}, "*");
-
-              // Keep current URL query param updated for DB persistence on form submit/rerun
-              try {{
-                const curUrl = new URL(window.parent.location.href);
-                curUrl.searchParams.set("sync_event", encodeURIComponent(JSON.stringify(eventObj)));
-                window.parent.history.replaceState(null, '', curUrl.toString());
-              }} catch(err) {{}}
             }}
           }} catch(e) {{}}
         }}
@@ -369,37 +355,41 @@ def render_interview_security_shield(session_id: str = ""):
           const box = document.getElementById("warningBox");
           const t = document.getElementById("warningTitle");
           const m = document.getElementById("warningMsg");
+          if (!box || !t || !m) return;
           box.className = "alert-box " + (type === "danger" ? "alert-danger" : "alert-warning");
           t.innerText = title;
           m.innerText = message;
           box.style.display = "block";
 
           const wrap = document.getElementById("videoWrap");
-          if (type === "danger") {{
-            wrap.classList.add("alert-red");
-          }} else {{
-            wrap.classList.remove("alert-red");
+          if (wrap) {{
+            if (type === "danger") wrap.classList.add("alert-red");
+            else wrap.classList.remove("alert-red");
           }}
 
-          // Also update overall status pill
           const pill = document.getElementById("overallStatusBadge");
-          if (type === "danger") {{
-            pill.className = "pill-badge pill-alert";
-            pill.innerText = "● Alert";
-          }} else if (type === "warning") {{
-            pill.className = "pill-badge pill-warn";
-            pill.innerText = "● Warning";
+          if (pill) {{
+            if (type === "danger") {{
+              pill.className = "pill-badge pill-alert";
+              pill.innerText = "● Alert";
+            }} else if (type === "warning") {{
+              pill.className = "pill-badge pill-warn";
+              pill.innerText = "● Warning";
+            }}
           }}
         }}
 
         function clearAlertIf(typeMatch) {{
           if (lastWarningType === typeMatch) {{
             const box = document.getElementById("warningBox");
-            box.style.display = "none";
-            document.getElementById("videoWrap").classList.remove("alert-red");
+            if (box) box.style.display = "none";
+            const wrap = document.getElementById("videoWrap");
+            if (wrap) wrap.classList.remove("alert-red");
             const pill = document.getElementById("overallStatusBadge");
-            pill.className = "pill-badge pill-normal";
-            pill.innerText = "● Normal";
+            if (pill) {{
+              pill.className = "pill-badge pill-normal";
+              pill.innerText = "● Normal";
+            }}
             lastWarningType = "";
           }}
         }}
@@ -408,20 +398,21 @@ def render_interview_security_shield(session_id: str = ""):
         function handleTabSwitch(reason) {{
           if (!isArmed) return;
           const now = Date.now();
-          // Debounce: prevent multiple triggers within 3.5 seconds
           if (now - lastTabSwitchTime < 3500) return;
           lastTabSwitchTime = now;
 
           tabViolations += 1;
-          document.getElementById("tabHud").innerText = "⚠️ Tab: " + tabViolations + "/3";
-          document.getElementById("tabCountLabel").innerText = tabViolations + " switches";
+          const tabHud = document.getElementById("tabHud");
+          if (tabHud) tabHud.innerText = "⚠️ Tab: " + tabViolations + "/3";
+          const tabCountLabel = document.getElementById("tabCountLabel");
+          if (tabCountLabel) tabCountLabel.innerText = tabViolations + " switches";
 
           const tabDot = document.getElementById("tabDot");
           const tabText = document.getElementById("tabStatusText");
 
           if (tabViolations === 1) {{
-            tabDot.className = "dot dot-amber";
-            tabText.innerText = "Tab Focus: Warning 1 issued";
+            if (tabDot) tabDot.className = "dot dot-amber";
+            if (tabText) tabText.innerText = "Tab Focus: Warning 1 issued";
             showAlert("warning", "Warning 1:", "You switched away from the interview window. Please return to your interview.");
             lastWarningType = "tab_1";
             recordSecurityEvent("tab_switch_warning_1", {{
@@ -430,8 +421,8 @@ def render_interview_security_shield(session_id: str = ""):
               disqualified: false
             }});
           }} else if (tabViolations === 2) {{
-            tabDot.className = "dot dot-amber";
-            tabText.innerText = "Tab Focus: Warning 2 issued";
+            if (tabDot) tabDot.className = "dot dot-amber";
+            if (tabText) tabText.innerText = "Tab Focus: Warning 2 issued";
             showAlert("warning", "Warning 2:", "Another tab-switching violation has been detected.");
             lastWarningType = "tab_2";
             recordSecurityEvent("tab_switch_warning_2", {{
@@ -440,8 +431,8 @@ def render_interview_security_shield(session_id: str = ""):
               disqualified: false
             }});
           }} else {{
-            tabDot.className = "dot dot-red";
-            tabText.innerText = "Tab Focus: Flagged for Review";
+            if (tabDot) tabDot.className = "dot dot-red";
+            if (tabText) tabText.innerText = "Tab Focus: Flagged for Review";
             showAlert("danger", "Flagged:", "Multiple tab-switching violations detected. Your interview has been flagged for recruiter review.");
             lastWarningType = "tab_flagged";
             recordSecurityEvent("tab_switch_flagged", {{
@@ -453,57 +444,22 @@ def render_interview_security_shield(session_id: str = ""):
           }}
         }}
 
-        // Window & Document Visibility Listeners (Iframe & Parent)
         document.addEventListener("visibilitychange", function() {{
           if (document.hidden || document.visibilityState === "hidden") {{
             handleTabSwitch("Browser tab hidden");
           }}
         }});
         window.addEventListener("blur", function() {{
-          // Verify blur is not momentary dialog
           setTimeout(function() {{
             if (document.hidden || !document.hasFocus()) {{
               handleTabSwitch("Window focus lost or application switched");
             }}
-          }}, 400);
+          }}, 500);
         }});
-
-        try {{
-          if (window.parent && window.parent.document) {{
-            window.parent.document.addEventListener("visibilitychange", function() {{
-              if (window.parent.document.hidden || window.parent.document.visibilityState === "hidden") {{
-                handleTabSwitch("Parent tab switch detected");
-              }}
-            }});
-            window.parent.addEventListener("blur", function() {{
-              setTimeout(function() {{
-                if (window.parent.document.hidden || !window.parent.document.hasFocus()) {{
-                  handleTabSwitch("Parent window blur or app switch");
-                }}
-              }}, 400);
-            }});
-          }}
-        }} catch(e) {{}}
-
-        // Fullscreen Change Monitor
-        function onFullscreenChanged() {{
-          const pDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-          if (!pDoc.fullscreenElement && !document.fullscreenElement) {{
-            recordSecurityEvent("fullscreen_exit", {{ message: "Candidate exited fullscreen mode" }});
-          }}
-        }}
-        document.addEventListener("fullscreenchange", onFullscreenChanged);
-        document.addEventListener("webkitfullscreenchange", onFullscreenChanged);
-        try {{
-          if (window.parent && window.parent.document) {{
-            window.parent.document.addEventListener("fullscreenchange", onFullscreenChanged);
-            window.parent.document.addEventListener("webkitfullscreenchange", onFullscreenChanged);
-          }}
-        }} catch(e) {{}}
 
         function toggleFullscreen() {{
           try {{
-            const pDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+            const pDoc = safeGetParentDoc();
             const target = pDoc.documentElement;
             if (!pDoc.fullscreenElement) {{
               target.requestFullscreen().catch(function() {{}});
@@ -521,9 +477,6 @@ def render_interview_security_shield(session_id: str = ""):
               audio: true
             }});
             window._hirexpMediaStream = mediaStream;
-            try {{
-              if (window.parent) window.parent._hirexpMediaStream = mediaStream;
-            }} catch(e) {{}}
 
             videoTrack = mediaStream.getVideoTracks()[0];
             audioTrack = mediaStream.getAudioTracks()[0];
@@ -536,30 +489,16 @@ def render_interview_security_shield(session_id: str = ""):
               loadAIModels();
             }};
 
-            // Monitor Camera Disconnection
             if (videoTrack) {{
-              videoTrack.onended = function() {{
-                onSensorDisconnected("camera");
-              }};
-              videoTrack.onmute = function() {{
-                onSensorDisconnected("camera");
-              }};
-              videoTrack.onunmute = function() {{
-                onSensorReconnected("camera");
-              }};
+              videoTrack.onended = () => onSensorDisconnected("camera");
+              videoTrack.onmute = () => onSensorDisconnected("camera");
+              videoTrack.onunmute = () => onSensorReconnected("camera");
             }}
 
-            // Monitor Microphone Disconnection
             if (audioTrack) {{
-              audioTrack.onended = function() {{
-                onSensorDisconnected("microphone");
-              }};
-              audioTrack.onmute = function() {{
-                onSensorDisconnected("microphone");
-              }};
-              audioTrack.onunmute = function() {{
-                onSensorReconnected("microphone");
-              }};
+              audioTrack.onended = () => onSensorDisconnected("microphone");
+              audioTrack.onmute = () => onSensorDisconnected("microphone");
+              audioTrack.onunmute = () => onSensorReconnected("microphone");
             }}
 
             navigator.mediaDevices.ondevicechange = function() {{
@@ -581,16 +520,18 @@ def render_interview_security_shield(session_id: str = ""):
           const streamDot = document.getElementById("streamDot");
           const streamText = document.getElementById("streamStatusText");
           const streamLabel = document.getElementById("streamLabel");
-          streamDot.className = "dot dot-red";
-          streamLabel.innerText = "OFFLINE";
-          streamLabel.style.color = "#EF4444";
+          if (streamDot) streamDot.className = "dot dot-red";
+          if (streamLabel) {{
+            streamLabel.innerText = "OFFLINE";
+            streamLabel.style.color = "#EF4444";
+          }}
 
           if (sensorName === "camera") {{
-            streamText.innerText = "Sensors: Camera Disconnected";
+            if (streamText) streamText.innerText = "Sensors: Camera Disconnected";
             showAlert("danger", "Device Notice:", "Camera disconnected. Please reconnect your camera to continue.");
             recordSecurityEvent("camera_disconnected", {{ timestamp: new Date().toISOString() }});
           }} else {{
-            streamText.innerText = "Sensors: Microphone Disconnected";
+            if (streamText) streamText.innerText = "Sensors: Microphone Disconnected";
             showAlert("danger", "Device Notice:", "Microphone disconnected. Please reconnect your microphone.");
             recordSecurityEvent("microphone_disconnected", {{ timestamp: new Date().toISOString() }});
           }}
@@ -600,10 +541,12 @@ def render_interview_security_shield(session_id: str = ""):
           const streamDot = document.getElementById("streamDot");
           const streamText = document.getElementById("streamStatusText");
           const streamLabel = document.getElementById("streamLabel");
-          streamDot.className = "dot dot-green";
-          streamText.innerText = "Sensors: Camera & Mic Active";
-          streamLabel.innerText = "LIVE";
-          streamLabel.style.color = "#34D399";
+          if (streamDot) streamDot.className = "dot dot-green";
+          if (streamText) streamText.innerText = "Sensors: Camera & Mic Active";
+          if (streamLabel) {{
+            streamLabel.innerText = "LIVE";
+            streamLabel.style.color = "#34D399";
+          }}
           clearAlertIf("sensor");
           recordSecurityEvent("sensor_reconnected", {{ sensor: sensorName }});
         }}
@@ -622,13 +565,13 @@ def render_interview_security_shield(session_id: str = ""):
             const fill = document.getElementById("micLevelFill");
 
             function updateMeter() {{
+              if (!analyser || !fill) return;
               analyser.getByteFrequencyData(dataArray);
               let sum = 0;
               for (let i = 0; i < dataArray.length; i++) {{
                 sum += dataArray[i];
               }}
               const avg = sum / dataArray.length;
-              // Normalize volume percent
               const pct = Math.min(100, Math.round((avg / 128) * 100));
               fill.style.width = pct + "%";
               requestAnimationFrame(updateMeter);
@@ -639,30 +582,37 @@ def render_interview_security_shield(session_id: str = ""):
 
         // ── 4. LOAD AI VISION MODELS (BLAZEFACE & COCO-SSD) ──
         async function loadAIModels() {{
+          // Start render loop immediately
+          requestAnimationFrame(renderLoop);
+
           try {{
             blazefaceModel = await blazeface.load();
-            document.getElementById("faceStatusText").innerText = "Face Detection: Vision Active";
-          }} catch(e) {{}}
+            const faceText = document.getElementById("faceStatusText");
+            if (faceText) faceText.innerText = "Face Detection: Vision Active";
+            // Start sequential face detection loop
+            setTimeout(faceDetectionLoop, 800);
+          }} catch(e) {{
+            console.warn("BlazeFace load notice:", e);
+          }}
 
           try {{
             cocoModel = await cocoSsd.load();
-            document.getElementById("gadgetStatusText").innerText = "Gadget Scan: Active";
-          }} catch(e) {{}}
-
-          // Start continuous analysis loops
-          requestAnimationFrame(renderLoop);
-          setInterval(runFaceDetection, 550);
-          setInterval(runGadgetDetection, 850);
+            const gText = document.getElementById("gadgetStatusText");
+            if (gText) gText.innerText = "Gadget Scan: Active";
+            // Start sequential gadget detection loop
+            setTimeout(gadgetDetectionLoop, 1500);
+          }} catch(e) {{
+            console.warn("COCO-SSD load notice:", e);
+          }}
         }}
 
-        // Render Canvas Loop (Mirrored Video + Real-Time Bounding Boxes)
+        // Render Canvas Loop (Mirrored Video + Bounding Boxes)
         let lastFaces = [];
         let lastGadgets = [];
 
         function renderLoop() {{
-          if (video.readyState >= 2) {{
+          if (video && video.readyState >= 2) {{
             ctx.save();
-            // Draw mirrored image
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -673,7 +623,7 @@ def render_interview_security_shield(session_id: str = ""):
               const isMulti = lastFaces.length > 1;
               for (let i = 0; i < lastFaces.length; i++) {{
                 const f = lastFaces[i];
-                // Mirror coordinates because video is mirrored
+                if (!f.bottomRight || !f.topLeft) continue;
                 const startX = canvas.width - f.bottomRight[0];
                 const startY = f.topLeft[1];
                 const w = f.bottomRight[0] - f.topLeft[0];
@@ -693,6 +643,7 @@ def render_interview_security_shield(session_id: str = ""):
             if (lastGadgets && lastGadgets.length > 0) {{
               for (let i = 0; i < lastGadgets.length; i++) {{
                 const g = lastGadgets[i];
+                if (!g.bbox) continue;
                 const startX = canvas.width - (g.bbox[0] + g.bbox[2]);
                 const startY = g.bbox[1];
                 const w = g.bbox[2];
@@ -711,111 +662,138 @@ def render_interview_security_shield(session_id: str = ""):
           requestAnimationFrame(renderLoop);
         }}
 
-        // ── 5. MULTIPLE-PERSON DETECTION ANALYSIS ──
-        async function runFaceDetection() {{
-          if (!blazefaceModel || video.readyState < 2) return;
-          try {{
-            const predictions = await blazefaceModel.estimateFaces(video, false);
-            lastFaces = predictions || [];
-            const count = lastFaces.length;
+        // ── 5. SEQUENTIAL ASYNC MULTIPLE-PERSON DETECTION (ZERO UI BLOCKING) ──
+        async function faceDetectionLoop() {{
+          if (!isArmed) {{
+            setTimeout(faceDetectionLoop, 1000);
+            return;
+          }}
+          if (blazefaceModel && video && video.readyState >= 2 && !isDetectingFace) {{
+            isDetectingFace = true;
+            try {{
+              const predictions = await blazefaceModel.estimateFaces(video, false);
+              lastFaces = predictions || [];
+              const count = lastFaces.length;
 
-            document.getElementById("faceCountLabel").innerText = count;
-            document.getElementById("faceHud").innerText = count > 1 ? "🚨 Faces: " + count : "👤 Faces: " + count;
+              const faceCountLabel = document.getElementById("faceCountLabel");
+              if (faceCountLabel) faceCountLabel.innerText = count;
+              const faceHud = document.getElementById("faceHud");
+              if (faceHud) faceHud.innerText = count > 1 ? "🚨 Faces: " + count : "👤 Faces: " + count;
 
-            const faceDot = document.getElementById("faceDot");
-            const faceText = document.getElementById("faceStatusText");
+              const faceDot = document.getElementById("faceDot");
+              const faceText = document.getElementById("faceStatusText");
 
-            if (count === 1) {{
-              consecutiveZeroFaces = 0;
-              consecutiveMultiFaces = 0;
-              faceDot.className = "dot dot-green";
-              faceText.innerText = "Face Detection: 1 Person (Verified)";
-              clearAlertIf("face");
-            }} else if (count === 0) {{
-              consecutiveZeroFaces += 1;
-              consecutiveMultiFaces = 0;
-              if (consecutiveZeroFaces >= 4) {{
-                faceDot.className = "dot dot-amber";
-                faceText.innerText = "Face Detection: No Face Visible";
-                showAlert("warning", "Face Visibility:", "No face detected. Please remain visible during the interview.");
-                lastWarningType = "face";
-                if (consecutiveZeroFaces === 4) {{
-                  recordSecurityEvent("no_face_detected", {{ consecutive_cycles: consecutiveZeroFaces }});
+              if (count === 1) {{
+                consecutiveZeroFaces = 0;
+                consecutiveMultiFaces = 0;
+                if (faceDot) faceDot.className = "dot dot-green";
+                if (faceText) faceText.innerText = "Face Detection: 1 Person (Verified)";
+                clearAlertIf("face");
+              }} else if (count === 0) {{
+                consecutiveZeroFaces += 1;
+                consecutiveMultiFaces = 0;
+                if (consecutiveZeroFaces >= 3) {{
+                  if (faceDot) faceDot.className = "dot dot-amber";
+                  if (faceText) faceText.innerText = "Face Detection: No Face Visible";
+                  showAlert("warning", "Face Visibility:", "No face detected. Please remain visible during the interview.");
+                  lastWarningType = "face";
+                  if (consecutiveZeroFaces === 3) {{
+                    recordSecurityEvent("no_face_detected", {{ consecutive_cycles: consecutiveZeroFaces }});
+                  }}
+                }}
+              }} else {{
+                consecutiveMultiFaces += 1;
+                consecutiveZeroFaces = 0;
+                if (consecutiveMultiFaces >= 2) {{
+                  if (faceDot) faceDot.className = "dot dot-red";
+                  if (faceText) faceText.innerText = "Face Detection: Multiple Faces (" + count + ")";
+                  showAlert("danger", "Integrity Notice:", "Multiple people detected. Only one candidate is permitted during the interview.");
+                  lastWarningType = "face";
+                  if (consecutiveMultiFaces === 2) {{
+                    recordSecurityEvent("multiple_people_detected", {{ face_count: count }});
+                  }}
                 }}
               }}
-            }} else {{
-              consecutiveMultiFaces += 1;
-              consecutiveZeroFaces = 0;
-              if (consecutiveMultiFaces >= 3) {{
-                faceDot.className = "dot dot-red";
-                faceText.innerText = "Face Detection: Multiple Faces (" + count + ")";
-                showAlert("danger", "Integrity Notice:", "Multiple people detected. Only one candidate is permitted during the interview.");
-                lastWarningType = "face";
-                if (consecutiveMultiFaces === 3) {{
-                  recordSecurityEvent("multiple_people_detected", {{ face_count: count }});
-                }}
-              }}
+            }} catch(e) {{
+            }} finally {{
+              isDetectingFace = false;
             }}
-          }} catch(e) {{}}
+          }}
+          // Schedule next check only AFTER previous run finishes (1.2s delay)
+          setTimeout(faceDetectionLoop, 1200);
         }}
 
-        // ── 6. MOBILE PHONE & GADGET DETECTION (COCO-SSD) ──
+        // ── 6. SEQUENTIAL ASYNC MOBILE PHONE & GADGET DETECTION ──
         const PROHIBITED_CLASSES = ["cell phone", "laptop", "remote", "tv", "tablet"];
 
-        async function runGadgetDetection() {{
-          if (!cocoModel || video.readyState < 2) return;
-          try {{
-            const predictions = await cocoModel.detect(video);
-            const suspicious = predictions.filter(p => PROHIBITED_CLASSES.includes(p.class.toLowerCase()) && p.score >= 0.52);
-            lastGadgets = suspicious;
+        async function gadgetDetectionLoop() {{
+          if (!isArmed) {{
+            setTimeout(gadgetDetectionLoop, 1500);
+            return;
+          }}
+          if (cocoModel && video && video.readyState >= 2 && !isDetectingGadget) {{
+            isDetectingGadget = true;
+            try {{
+              const predictions = await cocoModel.detect(video);
+              const suspicious = (predictions || []).filter(p => PROHIBITED_CLASSES.includes(p.class.toLowerCase()) && p.score >= 0.52);
+              lastGadgets = suspicious;
 
-            const gDot = document.getElementById("gadgetDot");
-            const gText = document.getElementById("gadgetStatusText");
-            const gLabel = document.getElementById("gadgetLabel");
+              const gDot = document.getElementById("gadgetDot");
+              const gText = document.getElementById("gadgetStatusText");
+              const gLabel = document.getElementById("gadgetLabel");
 
-            if (suspicious.length > 0) {{
-              consecutivePhoneDetected += 1;
-              if (consecutivePhoneDetected >= 2) {{
-                const top = suspicious[0];
-                const isPhone = top.class.toLowerCase() === "cell phone";
-                gDot.className = "dot dot-red";
-                gLabel.innerText = "DETECTED";
-                gLabel.style.color = "#EF4444";
-
-                if (isPhone) {{
-                  gText.innerText = "Gadget Scan: Mobile Phone Detected";
-                  showAlert("danger", "Device Prohibited:", "Mobile Phone Detected! Electronic devices are not allowed during the interview.");
-                  lastWarningType = "gadget";
-                  if (consecutivePhoneDetected === 2) {{
-                    recordSecurityEvent("mobile_phone_detected", {{ object: top.class, confidence: Math.round(top.score * 100) }});
+              if (suspicious.length > 0) {{
+                consecutivePhoneDetected += 1;
+                if (consecutivePhoneDetected >= 2) {{
+                  const top = suspicious[0];
+                  const isPhone = top.class.toLowerCase() === "cell phone";
+                  if (gDot) gDot.className = "dot dot-red";
+                  if (gLabel) {{
+                    gLabel.innerText = "DETECTED";
+                    gLabel.style.color = "#EF4444";
                   }}
-                }} else {{
-                  gText.innerText = "Gadget Scan: " + top.class + " Detected";
-                  showAlert("danger", "Device Prohibited:", "Unauthorized electronic device detected. Please remove it from the interview area.");
-                  lastWarningType = "gadget";
-                  if (consecutivePhoneDetected === 2) {{
-                    recordSecurityEvent("unauthorized_gadget_detected", {{ object: top.class, confidence: Math.round(top.score * 100) }});
+
+                  if (isPhone) {{
+                    if (gText) gText.innerText = "Gadget Scan: Mobile Phone Detected";
+                    showAlert("danger", "Device Prohibited:", "Mobile Phone Detected! Electronic devices are not allowed during the interview.");
+                    lastWarningType = "gadget";
+                    if (consecutivePhoneDetected === 2) {{
+                      recordSecurityEvent("mobile_phone_detected", {{ object: top.class, confidence: Math.round(top.score * 100) }});
+                    }}
+                  }} else {{
+                    if (gText) gText.innerText = "Gadget Scan: " + top.class + " Detected";
+                    showAlert("danger", "Device Prohibited:", "Unauthorized electronic device detected. Please remove it from the interview area.");
+                    lastWarningType = "gadget";
+                    if (consecutivePhoneDetected === 2) {{
+                      recordSecurityEvent("unauthorized_gadget_detected", {{ object: top.class, confidence: Math.round(top.score * 100) }});
+                    }}
                   }}
                 }}
+              }} else {{
+                consecutivePhoneDetected = 0;
+                if (gDot) gDot.className = "dot dot-green";
+                if (gText) gText.innerText = "Gadget Scan: Clear (No devices)";
+                if (gLabel) {{
+                  gLabel.innerText = "OK";
+                  gLabel.style.color = "#34D399";
+                }}
+                clearAlertIf("gadget");
               }}
-            }} else {{
-              consecutivePhoneDetected = 0;
-              gDot.className = "dot dot-green";
-              gText.innerText = "Gadget Scan: Clear (No devices)";
-              gLabel.innerText = "OK";
-              gLabel.style.color = "#34D399";
-              clearAlertIf("gadget");
+            }} catch(e) {{
+            }} finally {{
+              isDetectingGadget = false;
             }}
-          }} catch(e) {{}}
+          }}
+          // Schedule next check only AFTER previous run finishes (2.5s delay)
+          setTimeout(gadgetDetectionLoop, 2500);
         }}
 
         // ── 7. COPY, PASTE & KEYBOARD RESTRICTIONS ──
         function hookParentRestrictions() {{
           try {{
-            const pDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-            const pWin = window.parent || window;
+            const pDoc = safeGetParentDoc();
+            const pWin = (window.parent && window.parent !== window) ? window.parent : window;
 
-            // Restrict paste into answer textareas
             pDoc.addEventListener("paste", function(e) {{
               const target = e.target;
               if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT")) {{
@@ -826,29 +804,25 @@ def render_interview_security_shield(session_id: str = ""):
               }}
             }}, true);
 
-            // Restrict copy / cut
             pDoc.addEventListener("copy", function(e) {{
               e.preventDefault();
               recordSecurityEvent("copy_attempt", {{}});
             }}, true);
+
             pDoc.addEventListener("cut", function(e) {{
               e.preventDefault();
               recordSecurityEvent("cut_attempt", {{}});
             }}, true);
 
-            // Context menu restriction
             pDoc.addEventListener("contextmenu", function(e) {{
               e.preventDefault();
             }}, true);
 
-            // Monitor Keyboard Shortcuts & DevTools attempts
             pWin.addEventListener("keydown", function(e) {{
-              // F12 or Ctrl+Shift+I / J / C or Ctrl+U
               if (e.key === "F12" || (e.ctrlKey && e.shiftKey && ["I", "J", "C", "i", "j", "c"].includes(e.key)) || (e.ctrlKey && ["u", "U"].includes(e.key))) {{
                 e.preventDefault();
                 recordSecurityEvent("devtools_open_attempt", {{ key: e.key }});
               }}
-              // Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+P, Ctrl+S
               if (e.ctrlKey && ["c", "v", "x", "p", "s", "C", "V", "X", "P", "S"].includes(e.key)) {{
                 if (["p", "P", "s", "S"].includes(e.key)) {{
                   e.preventDefault();

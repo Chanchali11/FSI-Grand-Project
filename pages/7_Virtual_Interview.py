@@ -16,7 +16,8 @@ from src.database.models import (
     ResumeDocument,
 )
 import json
-from src.database.repository import DatabaseRepository, get_db_session
+from src.database.repository import DatabaseRepository, get_db_session, init_db
+init_db()
 from src.interview.interview_engine import InterviewEngine
 from src.recruitment.invitation_service import InvitationService
 from src.reports.interview_report_service import InterviewReportService
@@ -44,29 +45,13 @@ st.markdown(
       header { visibility: hidden; height: 0 !important; }
       footer { visibility: hidden; height: 0 !important; }
 
-      /* Fit complete virtual interview room into single window without page scrolling */
-      html, body {
-        overflow: hidden !important;
-        height: 100vh !important;
-        margin: 0 !important;
-        padding: 0 !important;
-      }
-      [data-testid="stAppViewContainer"] {
-        overflow: hidden !important;
-        height: 100vh !important;
-      }
-      .main {
-        overflow: hidden !important;
-        height: 100vh !important;
-      }
+      /* Compact single-window cockpit styling */
       .block-container {
-        padding-top: 0.5rem !important;
-        padding-bottom: 0.3rem !important;
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
+        padding-top: 0.65rem !important;
+        padding-bottom: 1.25rem !important;
+        padding-left: 1.25rem !important;
+        padding-right: 1.25rem !important;
         max-width: 100% !important;
-        height: 100vh !important;
-        overflow-y: auto !important;
       }
       [style*="background: #FFF"] *, [style*="background: white"] *, [style*="background: #F8FAFC"] * {
         color: #0F172A !important;
@@ -413,7 +398,7 @@ else:
 
         # ── 7. ACTIVE INTERVIEW COCKPIT (COMPACT SINGLE-WINDOW 3-COLUMN LAYOUT) ──
         # Sleek Single-Line Top Header Bar (Zero scroll footprint)
-        col_hdr_info, col_hdr_badges = st.columns([6, 4])
+        col_hdr_info, col_b1, col_b2, col_b3, col_b4 = st.columns([5.5, 1.1, 1.1, 1.1, 1.2])
         with col_hdr_info:
             st.markdown(
                 f"""
@@ -427,21 +412,18 @@ else:
                 """,
                 unsafe_allow_html=True,
             )
-        with col_hdr_badges:
-            col_b1, col_b2, col_b3, col_b4 = st.columns([1, 1, 1, 1.2])
-            with col_b1:
-                st.markdown(render_badge(f"{st.session_state.interview_difficulty}", "neutral"), unsafe_allow_html=True)
-            with col_b2:
-                st.markdown(render_badge(f"{interview_session.stage}", "primary"), unsafe_allow_html=True)
-            with col_b3:
-                st.markdown(render_badge(f"Q {min(q_idx, total_q)}/{total_q}", "success"), unsafe_allow_html=True)
-            with col_b4:
-                # Camera Position Toggle (Extreme Right vs Extreme Left)
-                cur_cam = st.session_state.camera_position
-                cam_label = "📹 Cam: Right" if cur_cam == "right" else "📹 Cam: Left"
-                if st.button(cam_label, help="Toggle camera feed between Extreme Right and Extreme Left side", key="toggle_cam_side"):
-                    st.session_state.camera_position = "left" if cur_cam == "right" else "right"
-                    st.rerun()
+        with col_b1:
+            st.markdown(render_badge(f"{st.session_state.interview_difficulty}", "neutral"), unsafe_allow_html=True)
+        with col_b2:
+            st.markdown(render_badge(f"{interview_session.stage}", "primary"), unsafe_allow_html=True)
+        with col_b3:
+            st.markdown(render_badge(f"Q {min(q_idx, total_q)}/{total_q}", "success"), unsafe_allow_html=True)
+        with col_b4:
+            cur_cam = st.session_state.camera_position
+            cam_label = "📹 Cam: Right" if cur_cam == "right" else "📹 Cam: Left"
+            if st.button(cam_label, help="Toggle camera feed between Extreme Right and Extreme Left side", key="toggle_cam_side"):
+                st.session_state.camera_position = "left" if cur_cam == "right" else "right"
+                st.rerun()
 
         # ── THREE-COLUMN INTERVIEW COCKPIT ──
         # Fits completely on one window without scrolling

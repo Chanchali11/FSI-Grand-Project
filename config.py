@@ -29,16 +29,24 @@ def _get_setting(key: str, default: str = "") -> str:
     """Fetch configuration prioritizing Streamlit Cloud secrets, then OS environment, then default."""
     try:
         import streamlit as st
-        if hasattr(st, "secrets") and key in st.secrets:
-            val = str(st.secrets[key]).strip()
-            if val != "":
-                return val
+        if hasattr(st, "secrets"):
+            for k in [key, key.lower(), key.upper()]:
+                try:
+                    if k in st.secrets:
+                        val = str(st.secrets[k]).strip().strip('"').strip("'")
+                        if val != "":
+                            return val
+                except Exception:
+                    pass
     except Exception:
         pass
 
-    val = os.getenv(key)
-    if val is not None and val.strip() != "":
-        return val.strip()
+    for k in [key, key.lower(), key.upper()]:
+        val = os.getenv(k)
+        if val is not None:
+            clean_val = val.strip().strip('"').strip("'")
+            if clean_val != "":
+                return clean_val
 
     return default
 
