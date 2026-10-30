@@ -1,3 +1,4 @@
+import os
 """
 Comprehensive Automated Test Suite covering:
 1. End-to-end recruitment workflow: 10 candidate upload -> Screening -> Recruiter Shortlisting
@@ -49,6 +50,7 @@ from src.security.student_auth_service import StudentAuthService
 @pytest.fixture
 def workflow_db():
     settings.SMTP_MOCK_MODE = True
+    os.environ["SMTP_MOCK_MODE"] = "true"
     engine = create_engine("sqlite:///:memory:", echo=False)
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)

@@ -122,9 +122,11 @@ class InvitationService:
         session.flush()
 
         # Step 5 & 6: Generate password setup token and URLs
+        from config import _get_setting
+        base_url = _get_setting("APP_BASE_URL", settings.APP_BASE_URL).rstrip("/")
         raw_setup_token, _ = StudentAuthService.create_password_setup_token(session, student_user.id, expire_hours=48)
-        setup_url = f"{settings.APP_BASE_URL}/Password_Setup?token={raw_setup_token}"
-        login_url = f"{settings.APP_BASE_URL}/Student_Login"
+        setup_url = f"{base_url}/Password_Setup?token={raw_setup_token}"
+        login_url = f"{base_url}/Student_Login"
 
         # Step 7: Send invitation email
         email_sent = False
@@ -257,9 +259,11 @@ class InvitationService:
         company_name = job.campaign.company.name if job and job.campaign and job.campaign.company else "HireSphere AI"
 
         # Generate fresh setup token
+        from config import _get_setting
+        base_url = _get_setting("APP_BASE_URL", settings.APP_BASE_URL).rstrip("/")
         raw_setup_token, _ = StudentAuthService.create_password_setup_token(session, student_user.id, expire_hours=48)
-        setup_url = f"{settings.APP_BASE_URL}/Password_Setup?token={raw_setup_token}"
-        login_url = f"{settings.APP_BASE_URL}/Student_Login"
+        setup_url = f"{base_url}/Password_Setup?token={raw_setup_token}"
+        login_url = f"{base_url}/Student_Login"
         deadline_str = invitation.deadline_at.strftime("%B %d, %Y at %I:%M %p UTC") if invitation.deadline_at else None
 
         sent, msg = EmailService.send_interview_invitation(

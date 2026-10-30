@@ -197,6 +197,11 @@ def render_score_badge(score: float, threshold: float = 70.0) -> str:
 def setup_sidebar_context(require_login: bool = True, allowed_roles: list[str] | None = None) -> dict:
     """Provides sidebar campaign/job selection preserved across page navigations with authentication and RBAC."""
     load_custom_css()
+    try:
+        from src.database.repository import init_db
+        init_db()
+    except Exception:
+        pass
     SessionManager.init_session_state()
     user = SessionManager.get_current_user()
 

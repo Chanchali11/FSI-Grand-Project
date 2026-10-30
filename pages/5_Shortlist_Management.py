@@ -187,7 +187,11 @@ with get_db_session() as session:
     from config import _get_setting
     active_host = _get_setting("SMTP_HOST", settings.SMTP_HOST)
     active_user = _get_setting("SMTP_USER", settings.SMTP_USER)
-    active_mock = _get_setting("SMTP_MOCK_MODE", str(settings.SMTP_MOCK_MODE)).lower() in ("true", "1", "yes")
+    raw_mock = _get_setting("SMTP_MOCK_MODE", "")
+    if raw_mock != "":
+        active_mock = raw_mock.lower() in ("true", "1", "yes")
+    else:
+        active_mock = settings.SMTP_MOCK_MODE
     is_live = bool(active_host and active_user and not active_mock)
     smtp_mode_info = f"🌐 <strong>Live SMTP Mode</strong> (Host: {active_host})" if is_live else "⚡ <strong>Mock Transport Mode</strong> (Local dev/testing: delivery simulated and recorded in database)"
     st.markdown(

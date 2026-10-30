@@ -177,7 +177,11 @@ class EmailService:
         """Dispatches email via standard library smtplib or deterministic mock transport."""
         from config import _get_setting
 
-        smtp_mock_mode = settings.SMTP_MOCK_MODE or (_get_setting("SMTP_MOCK_MODE", "true").lower() in ("true", "1", "yes"))
+        raw_mock = _get_setting("SMTP_MOCK_MODE", "")
+        if raw_mock != "":
+            smtp_mock_mode = raw_mock.lower() in ("true", "1", "yes")
+        else:
+            smtp_mock_mode = settings.SMTP_MOCK_MODE
         smtp_host = _get_setting("SMTP_HOST", settings.SMTP_HOST)
         smtp_port = int(_get_setting("SMTP_PORT", str(settings.SMTP_PORT)))
         smtp_user = _get_setting("SMTP_USER", settings.SMTP_USER)

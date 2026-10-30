@@ -29,6 +29,7 @@ if settings.DATABASE_URL.startswith("sqlite"):
 engine = create_engine(settings.DATABASE_URL, connect_args=connect_args, echo=False)
 SessionFactory = scoped_session(sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False, bind=engine))
 _db_init_lock = threading.Lock()
+_db_initialized = False
 
 
 def _migrate_existing_tables():
@@ -55,9 +56,112 @@ def _migrate_existing_tables():
             pass
 
 
+def _seed_defaults():
+    """Seed initial company, recruiters, and sample jobs if the database is newly created."""
+    session = SessionFactory()
+    try:
+        # Check if company exists
+        demo_company = session.query(Company).first()
+        if not demo_company:
+            demo_company = Company(
+                name="Acme Global Technologies",
+                domain="acmetech.io",
+                industry="Software & Cloud Infrastructure",
+                description="Enterprise cloud, AI, and scalable backend solutions.",
+            )
+            session.add(demo_company)
+            session.flush()
+
+            # Seed default recruiter account with cryptographically hashed password
+            demo_recruiter = Recruiter(
+                company_id=demo_company.id,
+                name="Alex Vance (Lead Talent Partner)",
+                email="recruiter@hiresphere.ai",
+                password_hash=hash_password("RecruiterPass2026!"),
+                role=UserRole.RECRUITER.value,
+            )
+            session.add(demo_recruiter)
+
+            # Seed default administrator account
+            demo_admin = Recruiter(
+                company_id=demo_company.id,
+                name="System Administrator",
+                email="admin@hiresphere.ai",
+                password_hash=hash_password("AdminPass2026!"),
+                role=UserRole.ADMIN.value,
+            )
+            session.add(demo_admin)
+
+            # Seed an initial campaign
+            campaign = RecruitmentCampaign(
+                company_id=demo_company.id,
+                title="Q4 Software Engineering Scale-up",
+                status="Active",
+                target_hires=5,
+            )
+            session.add(campaign)
+            session.flush()
+
+            # Seed a default sample job
+            sample_job = Job(
+                campaign_id=campaign.id,
+                title="Senior Python Backend Engineer",
+                department="Platform Engineering",
+                location="Remote (US/EU/APAC)",
+                job_type="Full-time",
+                experience_level="Senior",
+                min_years_experience=4.0,
+                description=(
+                    "We are looking for an experienced Senior Python Backend Engineer to build high-throughput "
+                    "distributed microservices, design low-latency PostgreSQL and Redis data architectures, "
+                    "and implement asynchronous messaging pipelines using Kafka. "
+                    "You will lead architectural reviews, mentor engineers, and ensure 99.99% system reliability."
+                ),
+                required_skills=["Python", "FastAPI", "SQLAlchemy", "PostgreSQL", "Docker", "REST APIs", "Microservices"],
+                preferred_skills=["Kafka", "Redis", "Kubernetes", "AWS", "CI/CD", "Pytest"],
+                mandatory_qualifications=["Minimum 4 years of backend development", "Proficiency in Python"],
+                technical_subjects=["Python Concurrency", "Database Indexing & Transactions", "System Architecture", "REST & Async Design"],
+                interview_duration_minutes=35,
+                interview_stages=["Technical", "HR"],
+                weight_keywords=0.25,
+                weight_similarity=0.25,
+                weight_experience=0.25,
+                weight_semantic=0.25,
+                shortlist_threshold=70.0,
+            )
+            session.add(sample_job)
+            session.commit()
+        else:
+            # Upgrade legacy placeholder password hashes for existing databases
+            for r in session.query(Recruiter).all():
+                if "default_hash_value" in r.password_hash or "$" not in r.password_hash:
+                    r.password_hash = hash_password("RecruiterPass2026!" if r.role == UserRole.RECRUITER.value else "AdminPass2026!")
+            
+            # Ensure admin account exists
+            admin_user = session.query(Recruiter).filter(Recruiter.role == UserRole.ADMIN.value).first()
+            if not admin_user:
+                admin_user = Recruiter(
+                    company_id=demo_company.id,
+                    name="System Administrator",
+                    email="admin@hiresphere.ai",
+                    password_hash=hash_password("AdminPass2026!"),
+                    role=UserRole.ADMIN.value,
+                )
+                session.add(admin_user)
+            session.commit()
+    except Exception as e:
+        session.rollback()
+        logger.warning(f"Database seed notice (may already be initialized): {e}")
+    finally:
+        session.close()
+
+
 def init_db():
     """Create all tables, migrate schema additions, and seed default company and recruiter if empty."""
+    global _db_initialized
     with _db_init_lock:
+        if _db_initialized:
+            return
         try:
             Base.metadata.create_all(bind=engine, checkfirst=True)
         except Exception as e:
@@ -68,104 +172,15 @@ def init_db():
         except Exception as e:
             logger.warning(f"Table migration notice: {e}")
 
-        try:
-            with get_db_session() as session:
-                # Check if company exists
-                demo_company = session.query(Company).first()
-                if not demo_company:
-                    demo_company = Company(
-                        name="Acme Global Technologies",
-                        domain="acmetech.io",
-                        industry="Software & Cloud Infrastructure",
-                        description="Enterprise cloud, AI, and scalable backend solutions.",
-                    )
-                    session.add(demo_company)
-                    session.flush()
-
-                    # Seed default recruiter account with cryptographically hashed password
-                    demo_recruiter = Recruiter(
-                        company_id=demo_company.id,
-                        name="Alex Vance (Lead Talent Partner)",
-                        email="recruiter@hiresphere.ai",
-                        password_hash=hash_password("RecruiterPass2026!"),
-                        role=UserRole.RECRUITER.value,
-                    )
-                    session.add(demo_recruiter)
-
-                    # Seed default administrator account
-                    demo_admin = Recruiter(
-                        company_id=demo_company.id,
-                        name="System Administrator",
-                        email="admin@hiresphere.ai",
-                        password_hash=hash_password("AdminPass2026!"),
-                        role=UserRole.ADMIN.value,
-                    )
-                    session.add(demo_admin)
-
-                    # Seed an initial campaign
-                    campaign = RecruitmentCampaign(
-                        company_id=demo_company.id,
-                        title="Q4 Software Engineering Scale-up",
-                        status="Active",
-                        target_hires=5,
-                    )
-                    session.add(campaign)
-                    session.flush()
-
-                    # Seed a default sample job
-                    sample_job = Job(
-                        campaign_id=campaign.id,
-                        title="Senior Python Backend Engineer",
-                        department="Platform Engineering",
-                        location="Remote (US/EU/APAC)",
-                        job_type="Full-time",
-                        experience_level="Senior",
-                        min_years_experience=4.0,
-                        description=(
-                            "We are looking for an experienced Senior Python Backend Engineer to build high-throughput "
-                            "distributed microservices, design low-latency PostgreSQL and Redis data architectures, "
-                            "and implement asynchronous messaging pipelines using Kafka. "
-                            "You will lead architectural reviews, mentor engineers, and ensure 99.99% system reliability."
-                        ),
-                        required_skills=["Python", "FastAPI", "SQLAlchemy", "PostgreSQL", "Docker", "REST APIs", "Microservices"],
-                        preferred_skills=["Kafka", "Redis", "Kubernetes", "AWS", "CI/CD", "Pytest"],
-                        mandatory_qualifications=["Minimum 4 years of backend development", "Proficiency in Python"],
-                        technical_subjects=["Python Concurrency", "Database Indexing & Transactions", "System Architecture", "REST & Async Design"],
-                        interview_duration_minutes=35,
-                        interview_stages=["Technical", "HR"],
-                        weight_keywords=0.25,
-                        weight_similarity=0.25,
-                        weight_experience=0.25,
-                        weight_semantic=0.25,
-                        shortlist_threshold=70.0,
-                    )
-                    session.add(sample_job)
-                    session.commit()
-                else:
-                    # Upgrade legacy placeholder password hashes for existing databases
-                    for r in session.query(Recruiter).all():
-                        if "default_hash_value" in r.password_hash or "$" not in r.password_hash:
-                            r.password_hash = hash_password("RecruiterPass2026!" if r.role == UserRole.RECRUITER.value else "AdminPass2026!")
-                    
-                    # Ensure admin account exists
-                    admin_user = session.query(Recruiter).filter(Recruiter.role == UserRole.ADMIN.value).first()
-                    if not admin_user:
-                        admin_user = Recruiter(
-                            company_id=demo_company.id,
-                            name="System Administrator",
-                            email="admin@hiresphere.ai",
-                            password_hash=hash_password("AdminPass2026!"),
-                            role=UserRole.ADMIN.value,
-                        )
-                        session.add(admin_user)
-                    session.commit()
-        except Exception as e:
-            logger.warning(f"Database seed notice (may already be initialized): {e}")
+        _db_initialized = True
+        _seed_defaults()
 
 
 @contextmanager
 def get_db_session() -> Generator[Session, None, None]:
     """Provide a transactional scope around a series of operations."""
+    if not _db_initialized:
+        init_db()
     session = SessionFactory()
     try:
         yield session

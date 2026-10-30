@@ -1,3 +1,4 @@
+import os
 """
 Full Backend API and service test script verifying:
 1. Candidate Shortlisting & Automatic Student Account Creation (Idempotent)
@@ -44,6 +45,7 @@ from src.security.student_auth_service import StudentAuthService
 @pytest.fixture
 def test_db():
     settings.SMTP_MOCK_MODE = True
+    os.environ["SMTP_MOCK_MODE"] = "true"
     engine = create_engine("sqlite:///:memory:", echo=False)
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine)
