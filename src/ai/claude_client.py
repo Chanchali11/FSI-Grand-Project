@@ -16,42 +16,123 @@ logger = logging.getLogger(__name__)
 
 
 class ClaudeClient:
-    """Interface for Anthropic Claude API with reliable fallback to structured mock mode."""
+    """Unified interface for Google Gemini & Anthropic Claude APIs with deterministic offline mock fallback."""
 
     def __init__(self, api_key: str | None = None, model: str | None = None):
         self.api_key = api_key or settings.ANTHROPIC_API_KEY
-        self.model = model or settings.CLAUDE_MODEL
-        self.use_mock = settings.USE_MOCK_AI or not bool(self.api_key)
+        self.claude_model = model or settings.CLAUDE_MODEL
+        self.gemini_key = getattr(settings, "GEMINI_API_KEY", "")
+        self.gemini_model = getattr(settings, "GEMINI_MODEL", "gemini-1.5-flash")
+        
+        pref_provider = getattr(settings, "AI_PROVIDER", "auto").lower()
 
-        self._client = None
-        if not self.use_mock:
+        # Determine active provider
+        if pref_provider == "gemini" and self.gemini_key:
+            self.provider = "gemini"
+        elif pref_provider == "claude" and self.api_key:
+            self.provider = "claude"
+        elif self.gemini_key:
+            self.provider = "gemini"
+        elif self.api_key:
+            self.provider = "claude"
+        else:
+            self.provider = "mock"
+
+        self.use_mock = getattr(settings, "USE_MOCK_AI", True) or (self.provider == "mock")
+
+        self._claude_client = None
+        if not self.use_mock and self.provider == "claude":
             try:
                 from anthropic import Anthropic
-                self._client = Anthropic(api_key=self.api_key)
+                self._claude_client = Anthropic(api_key=self.api_key)
             except Exception as e:
                 logger.warning(f"Could not initialize Anthropic client: {e}. Falling back to Mock mode.")
                 self.use_mock = True
 
-    def _call_claude(self, prompt: str, system: str = "You are an objective AI recruitment assistant.", max_tokens: int = 2000) -> str:
-        """Call Claude API or return empty string on error."""
-        if self.use_mock or not self._client:
-            return ""
-
+    def _call_gemini(self, prompt: str, system: str, max_tokens: int) -> str:
+        """Execute query against Google Gemini via SDK with HTTPS REST fallback."""
+        # 1. Try google.generativeai SDK
         try:
-            response = self._client.messages.create(
-                model=self.model,
+            import google.generativeai as genai
+            genai.configure(api_key=self.gemini_key)
+            model = genai.GenerativeModel(
+                model_name=self.gemini_model,
+                system_instruction=system,
+            )
+            res = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.2,
+                    max_output_tokens=max_tokens,
+                )
+            )
+            if res and hasattr(res, "text") and res.text:
+                return res.text
+        except Exception as e:
+            logger.warning(f"google.generativeai SDK call failed: {e}. Trying direct REST fallback...")
+
+        # 2. Resilient HTTPS REST fallback (zero extra dependencies)
+        try:
+            import urllib.request
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent?key={self.gemini_key}"
+            payload = {
+                "system_instruction": {"parts": [{"text": system}]},
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.2,
+                    "maxOutputTokens": max_tokens,
+                }
+            }
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=25) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+                candidates = body.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if parts:
+                        return parts[0].get("text", "")
+        except Exception as rest_err:
+            logger.error(f"Gemini REST API call failed: {rest_err}")
+
+        return ""
+
+    def _call_claude_api(self, prompt: str, system: str, max_tokens: int) -> str:
+        """Execute query against Anthropic Claude API."""
+        if not self._claude_client:
+            return ""
+        try:
+            response = self._claude_client.messages.create(
+                model=self.claude_model,
                 max_tokens=max_tokens,
                 temperature=0.2,
                 system=system,
                 messages=[{"role": "user", "content": prompt}],
             )
-            # Extract content text
             content_blocks = response.content
             if content_blocks and len(content_blocks) > 0:
                 return content_blocks[0].text
         except Exception as e:
-            logger.error(f"Claude API call failed: {e}. Using deterministic fallback.")
+            logger.error(f"Claude API call failed: {e}")
         return ""
+
+    def _call_ai(self, prompt: str, system: str = "You are an objective AI recruitment assistant.", max_tokens: int = 2000) -> str:
+        """Dispatches query to active AI provider (Gemini or Claude) or returns empty for mock."""
+        if self.use_mock:
+            return ""
+
+        if self.provider == "gemini":
+            return self._call_gemini(prompt, system, max_tokens)
+        elif self.provider == "claude":
+            return self._call_claude_api(prompt, system, max_tokens)
+        return ""
+
+    # Preserve backward compatibility
+    _call_claude = _call_ai
 
     def _clean_json(self, raw_text: str) -> dict[str, Any]:
         """Strip codeblocks and parse JSON safely."""

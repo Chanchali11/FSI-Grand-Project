@@ -81,12 +81,19 @@ class Settings(BaseModel):
     SMTP_USE_TLS: bool = _get_setting("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
     SMTP_MOCK_MODE: bool = _get_setting("SMTP_MOCK_MODE", "true").lower() in ("true", "1", "yes")
 
-    # Anthropic Claude API Configuration
+    # AI Engine Configuration (Google Gemini / Anthropic Claude)
+    GEMINI_API_KEY: str = _get_setting("GEMINI_API_KEY") or _get_setting("GOOGLE_API_KEY", "")
+    GEMINI_MODEL: str = _get_setting("GEMINI_MODEL", "gemini-1.5-flash")
     ANTHROPIC_API_KEY: str = _get_setting("ANTHROPIC_API_KEY", "")
     CLAUDE_MODEL: str = _get_setting("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
+    AI_PROVIDER: str = _get_setting("AI_PROVIDER", "auto").lower()
+    _has_any_key: bool = bool(
+        _get_setting("GEMINI_API_KEY") or _get_setting("GOOGLE_API_KEY") or _get_setting("ANTHROPIC_API_KEY")
+    )
     USE_MOCK_AI: bool = _get_setting(
-        "USE_MOCK_AI", "true" if not _get_setting("ANTHROPIC_API_KEY") else "false"
-    ).lower() in ("true", "1", "yes")
+        "USE_MOCK_AI",
+        "false" if _has_any_key else "true"
+    ).lower() in ("true", "1", "yes") if _get_setting("USE_MOCK_AI", "") != "" else (not _has_any_key)
 
     # Document Processing & Concurrency
     MAX_UPLOAD_SIZE_MB: int = 25
